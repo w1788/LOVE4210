@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B-Logic v6.3 [PDF Export]</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { margin: 0; background: #333; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        
+        /* --- オープニング画面 --- */
+        #opening-screen { width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #333; color: white; padding: 20px; box-sizing: border-box; }
+        #project-table-container { width: 90%; max-width: 1000px; display: flex; flex-direction: column; gap: 10px; }
+        #project-table { background: white; color: #333; border-radius: 12px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        #project-table table { width: 100%; border-collapse: collapse; }
+        #project-table th, #project-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        #project-table th { background: #444; color: white; }
+        
+        /* 編集可能なセル */
+        .editable { cursor: pointer; border: 1px transparent solid; }
+        .editable:hover { background-color: #f0f0f0; border: 1px #ccc solid; border-radius: 4px; }
+        .editable:focus { background-color: #fff; border: 1px #007AFF solid; outline: none; }
+
+        /* --- メイン画面 --- */
+        #main-application { display: none; width: 100vw; height: 100vh; flex-direction: row; }
+        #sidebar { width: 230px; background: #f8f9fa; padding: 10px; box-shadow: 2px 0 10px rgba(0,0,0,0.3); z-index: 10; height: 100vh; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+        #canvas-container { flex-grow: 1; position: relative; background: #fff; }
+        
+        select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; font-weight: bold; background: #fff; }
+        .main-btn { width: 100%; padding: 10px; cursor: pointer; border-radius: 8px; border: none; background: #007AFF; color: white; font-weight: bold; font-size: 14px; }
+        .btn-green { background: #28a745; } .btn-orange { background: #ff9500; } .btn-red { background: #dc3545; } .btn-panel { background: #6c757d; }
+
+        .grade-group { display: flex; gap: 4px; }
+        .grade-group button { flex: 1; padding: 8px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 16px; }
+        .grade-group button.active { background: #ff9500 !important; color: white !important; }
+
+        /* --- 浮遊窓 (共通) --- */
+        .floating-win { display: none; position: fixed; background: white; z-index: 100; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); overflow: hidden; }
+        .win-header { background: #444; color: white; padding: 8px; cursor: move; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .win-header button { background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
+        
+        /* 寸法入力パッド */
+        #numpad-win { width: 240px; top: 100px; left: 260px; }
+        .num-display { width: 100%; height: 40px; background: #eee; border: none; text-align: right; font-size: 20px; padding: 5px; box-sizing: border-box; }
+        .num-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px; }
+        .num-grid button { padding: 10px; font-size: 18px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        .num-grid .btn-enter { background: #007AFF; color: white; grid-column: span 3; }
+
+        /* 写真オーバーレイ */
+        #photo-overlay { width: 350px; height: 450px; top: 50px; left: 550px; resize: both; }
+        #pop-img-container { height: calc(100% - 35px); overflow-y: auto; padding: 10px; background: #eee; }
+        #pop-img-container img { width: 100%; border-radius: 4px; margin-bottom: 10px; }
+
+        /* 前回調書PDFビューア */
+        #pdf-win { width: 600px; height: 800px; top: 50px; left: 300px; resize: both; min-width: 300px; min-height: 400px; }
+        #pdf-container { height: calc(100% - 35px); width: 100%; overflow: auto; background: #ccc; display:block; cursor: grab; position: relative; }
+        #pdf-container.grabbing { cursor: grabbing; }
+        #pdf-canvas { border: 1px solid #999; user-select: none; }
+        .pdf-overlay-controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0, 0, 0, 0.6); padding: 5px; border-radius: 25px; z-index: 101; }
+        .pdf-overlay-controls button { padding: 5px 10px; cursor: pointer; border-radius: 20px; border: none; background: white; font-weight: bold; font-size: 12px; }
+        .pdf-overlay-controls span { color: white; display: flex; align-items: center; font-weight: bold; font-size: 12px; min-width: 50px; justify-content: center; }
+
+        .active-mode { border: 3px solid #ff3b30 !important; background: #fff1f0 !important; }
+    </style>
+</head>
+<body>
+
+<div id="opening-screen">
+    <h1>B-Logic 点検システム</h1>
+    <div id="project-table-container">
+        <div id="project-table">
+            <table id="main-table">
+                <thead>
+                    <tr>
+                        <th>構造物名</th>
+                        <th>点検日</th>
+                        <th>①損傷図PDF(背景)</th>
+                        <th>②前回調書PDF(参照)</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <tr>
+                        <td class="editable" contenteditable="true">A橋</td>
+                        <td class="editable" contenteditable="true">2026/02/06</td>
+                        <td><input type="file" id="damage-file-0" accept=".pdf"></td>
+                        <td><input type="file" id="report-file-0" accept=".pdf"></td>
+                        <td><button class="main-btn btn-green" onclick="startInspection(0)">点検開始</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <button class="main-btn btn-panel" style="width: auto; align-self: flex-start;" onclick="addRow()">＋ 行を追加</button>
+    </div>
+</div>
+
+<div id="main-application">
+    <div id="sidebar">
+        <h2 style="font-size: 16px; margin: 0; text-align: center;">B-Logic v6.3</h2>
+        <button class="main-btn btn-panel" onclick="backToDashboard()">◀ 案件選択へ戻る</button>
+        <hr style="width:100%">
+        
+        <div id="shape-mode-panel" style="background:#eee; padding:5px; border-radius:8px; border: 2px solid transparent;">
+            <span style="font-size:11px; font-weight:bold; color:#007AFF;">図面記号</span>
+            <select id="shape-type"><option value="ellipse">楕円形</option><option value="rect">長方形</option></select>
+            <select id="hatch-type" style="margin-top:4px;">
+                <option value="none">なし</option>
+                <option value="hibi_free">ひびわれ（手書き）</option> 
+                <option value="hakuri">剥離</option><option value="lime">遊離石灰</option>
+                <option value="tekin">鉄筋露出</option><option value="uki">うき</option><option value="rousui">漏水</option><option value="fushoku">腐食</option>
+            </select>
+            <button id="shape-draw-btn" class="main-btn" style="margin-top:4px;" onclick="toggleShapeMode()">配置モード開始</button>
+        </div>
+
+        <button class="main-btn" onclick="toggleStepPanel()">🚩 旗揚げを追加</button>
+        <div id="step-panel" style="display:none; background:#fff; border:2px solid #007AFF; padding:5px; border-radius:8px;">
+            <select id="damage-type" onchange="showGradeStep()"><option value="">損傷を選択...</option></select>
+            <div id="grade-step" style="display:none; margin-top:5px;">
+                <div class="grade-group">
+                    <button onclick="setGrade(this,'a')">a</button><button onclick="setGrade(this,'b')">b</button><button onclick="setGrade(this,'c')">c</button><button onclick="setGrade(this,'d')">d</button><button onclick="setGrade(this,'e')">e</button>
+                </div>
+            </div>
+        </div>
+
+        <button class="main-btn btn-orange" onclick="openNumpad()">📏 寸法入力</button>
+        <button class="main-btn" onclick="addFreeText()">Ｔ テキスト入力</button>
+        <button class="main-btn btn-green" onclick="document.getElementById('file-input').click()">📷 写真追加</button>
+        <button class="main-btn btn-panel" onclick="openReportWindow()">📄 前回調書を表示</button>
+        
+        <button class="main-btn" style="background: #343a40; margin-top: 10px;" onclick="saveInspectionData()">💾 データ保存 (JSON)</button>
+        <button class="main-btn" style="background: #5a6268; margin-top: 5px;" onclick="document.getElementById('load-json-input').click()">📂 データ読み込み</button>
+        <input type="file" id="load-json-input" style="display:none" accept=".json" onchange="loadInspectionData(this)">
+        
+        <button class="main-btn btn-red" onclick="deleteObject()">選択削除</button>
+        
+        <button class="main-btn" style="background: #28a745; margin-top: 10px;" onclick="saveAsPDF()">💾 PDFとして保存</button>
+        
+        <input type="file" id="file-input" style="display:none" accept="image/*" multiple onchange="handleFiles(this)">
+    </div>
+    
+    <div id="canvas-container"><canvas id="c"></canvas></div>
+</div>
+
+<div id="numpad-win" class="floating-win">
+    <div class="win-header"><span>寸法入力</span><button onclick="closeWin('numpad-win')">×</button></div>
+    <input type="text" id="num-display" class="num-display" readonly placeholder="0">
+    <div class="num-grid">
+        <button onclick="pressNum('7')">7</button><button onclick="pressNum('8')">8</button><button onclick="pressNum('9')">9</button>
+        <button onclick="pressNum('4')">4</button><button onclick="pressNum('5')">5</button><button onclick="pressNum('6')">6</button>
+        <button onclick="pressNum('1')">1</button><button onclick="pressNum('2')">2</button><button onclick="pressNum('3')">3</button>
+        <button onclick="pressNum('0')">0</button><button onclick="pressNum('×')">×</button><button onclick="pressNum('/')">/</button>
+        <button onclick="pressNum('C')" style="color:red;">C</button><button onclick="pressNum('DEL')">←</button><button onclick="pressNum('.')">.</button>
+        <button class="btn-enter" onclick="confirmDim()">配置</button>
+    </div>
+</div>
+
+<div id="photo-overlay" class="floating-win">
+    <div class="win-header"><span id="pop-title">写真</span><button onclick="closeWin('photo-overlay')">×</button></div>
+    <div id="pop-img-container"></div>
+</div>
+
+<div id="pdf-win" class="floating-win">
+    <div class="win-header">
+        <span>前回調書PDF</span>
+        <button onclick="closeWin('pdf-win')">×</button>
+    </div>
+    <div id="pdf-container">
+        <canvas id="pdf-canvas"></canvas>
+    </div>
+    <div class="pdf-overlay-controls">
+        <button onclick="zoomOut()">－</button>
+        <button onclick="prevPage()">◀ 前</button>
+        <span id="page-num">1 / 1</span>
+        <button onclick="nextPage()">次 ▶</button>
+        <button onclick="zoomIn()">＋</button>
+    </div>
+</div>
+
+<script>
+    // --- Fabric.js Setup ---
+    const canvas = new fabric.Canvas('c', { width: window.innerWidth - 230, height: window.innerHeight, backgroundColor: '#fff' });
+    const PITCH = 30; const patternCache = {};
+    const damages = ["01:腐食", "02:亀裂", "03:ゆるみ・脱落", "04:破断", "05:防食機能の劣化", "06:ひびわれ", "07:剥離・鉄筋露出", "08:漏水・遊離石灰", "09:抜け落ち", "10:補修・補強材の損傷", "11:床板ひびわれ", "12:うき", "13:遊間の異常", "14:路面の凹凸", "15:舗装の異常", "16:支承部の機能障害", "17:その他", "18:定着部の異常", "19:変色・劣化", "20:漏水・帯水", "21:異常な音・振動", "22:異常なたわみ", "23:変形・欠損", "24:土砂詰まり", "25:沈下・移動・傾斜", "26:洗堀"];
+    const select = document.getElementById('damage-type');
+    damages.forEach(d => { let opt = document.createElement('option'); opt.value = d; opt.innerText = d; select.appendChild(opt); });
+
+    let activeMode = null; let currentGrade = "";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    // 行追加用のカウンター
+    let rowCounter = 1;
+
+    // --- テーブル編集・操作 ---
+    function addRow() {
+        const tbody = document.getElementById('table-body');
+        const row = document.createElement('tr');
+        const id = rowCounter++;
+
+        row.innerHTML = `
+            <td class="editable" contenteditable="true">新規構造物</td>
+            <td class="editable" contenteditable="true">${new Date().toLocaleDateString('ja-JP')}</td>
+            <td><input type="file" id="damage-file-${id}" accept=".pdf"></td>
+            <td><input type="file" id="report-file-${id}" accept=".pdf"></td>
+            <td><button class="main-btn btn-green" onclick="startInspection(${id})">点検開始</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    // --- 背景図面の読み込み (損傷図) ---
+    function loadDamagePdfToMainCanvas(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            pdfjsLib.getDocument(new Uint8Array(e.target.result)).promise.then(function(pdfDoc_) {
+                pdfDoc_.getPage(1).then(function(page) {
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.height = viewport.height;
+                    tempCanvas.width = viewport.width;
+                    page.render({ canvasContext: tempCtx, viewport: viewport }).promise.then(function() {
+                        fabric.Image.fromURL(tempCanvas.toDataURL(), function(img) {
+                            img.set({ selectable: false, evented: false });
+                            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+                        });
+                    });
+                });
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // --- 前回のPDF読み込み用グローバル変数 ---
+    let currentReportFile = null;
+
+    // --- 前回調書PDFビューア (別窓) ---
+    let reportPdfDoc = null; let reportPageNum = 1; let reportScale = 1.0;
+    const pdfContainer = document.getElementById('pdf-container');
+    const pdfCanvas = document.getElementById('pdf-canvas'), ctx = pdfCanvas.getContext('2d');
+
+    function renderReportPage(num) {
+        if (!reportPdfDoc) return;
+        reportPdfDoc.getPage(num).then(function(page) {
+            const viewport = page.getViewport({ scale: reportScale });
+            pdfCanvas.height = viewport.height;
+            pdfCanvas.width = viewport.width;
+            page.render({ canvasContext: ctx, viewport: viewport });
+            document.getElementById('page-num').textContent = num + ' / ' + reportPdfDoc.numPages;
+        });
+    }
+
+    function openReportWindow() {
+        if (!currentReportFile) { alert("前回調書PDFを選択してくれ！"); return; }
+        document.getElementById('pdf-win').style.display = 'block';
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            pdfjsLib.getDocument(new Uint8Array(e.target.result)).promise.then(function(pdfDoc_) {
+                reportPdfDoc = pdfDoc_; reportPageNum = 1; renderReportPage(reportPageNum);
+            });
+        };
+        reader.readAsArrayBuffer(currentReportFile);
+    }
+    
+    function zoomIn() { reportScale += 0.25; renderReportPage(reportPageNum); }
+    function zoomOut() { if (reportScale <= 0.5) return; reportScale -= 0.25; renderReportPage(reportPageNum); }
+    function prevPage() { if (reportPageNum <= 1) return; reportPageNum--; renderReportPage(reportPageNum); }
+    function nextPage() { if (reportPageNum >= reportPdfDoc.numPages) return; reportPageNum++; renderReportPage(reportPageNum); }
+
+    // --- 参照PDFのドラッグ移動処理 (パンニング) ---
+    let isDragging = false; let startX, startY, scrollLeft, scrollTop;
+    pdfContainer.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        isDragging = true; pdfContainer.classList.add('grabbing');
+        startX = e.pageX - pdfContainer.offsetLeft; startY = e.pageY - pdfContainer.offsetTop;
+        scrollLeft = pdfContainer.scrollLeft; scrollTop = pdfContainer.scrollTop;
+    });
+    window.addEventListener('mouseup', () => { isDragging = false; pdfContainer.classList.remove('grabbing'); });
+    pdfContainer.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const x = e.pageX - pdfContainer.offsetLeft; const y = e.pageY - pdfContainer.offsetTop;
+        pdfContainer.scrollLeft = scrollLeft - (x - startX);
+        pdfContainer.scrollTop = scrollTop - (y - startY);
+    });
+
+    // --- v5.5 描画エンジン (旗・図形・パターン) ---
+    function toggleShapeMode() {
+        activeMode = (activeMode === 'shape') ? null : 'shape';
+        const isHibi = document.getElementById('hatch-type').value === 'hibi_free';
+        canvas.isDrawingMode = (activeMode === 'shape' && isHibi);
+        if (canvas.isDrawingMode) {
+            canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+            canvas.freeDrawingBrush.width = 3; canvas.freeDrawingBrush.color = 'red';
+        }
+        updateUI();
+    }
+    canvas.on('path:created', function() {
+        if (activeMode === 'shape' && canvas.isDrawingMode) { activeMode = null; canvas.isDrawingMode = false; updateUI(); }
+    });
+    function toggleStepPanel() { const p = document.getElementById('step-panel'); activeMode = (p.style.display==='block')?null:'flag'; p.style.display = (activeMode==='flag')?'block':'none'; canvas.isDrawingMode = false; updateUI(); }
+    function updateUI() {
+        document.getElementById('shape-mode-panel').classList.toggle('active-mode', activeMode === 'shape');
+        const btn = document.getElementById('shape-draw-btn');
+        if (activeMode === 'shape') { const isHibi = document.getElementById('hatch-type').value === 'hibi_free'; btn.innerText = isHibi ? '描画中...' : '配置中...'; }
+        else { btn.innerText = '配置モード開始'; }
+    }
+    function applyLegend(obj) {
+        if (!obj || !obj.hatchType || obj.hatchType === 'hibi_free') return;
+        const type = obj.hatchType;
+        if (obj._extra) obj._extra.forEach(e => canvas.remove(e)); obj._extra = [];
+        obj.set({ fill: 'transparent', stroke: 'red', strokeWidth: 2, strokeUniform: true });
+        if (['tekin', 'uki', 'rousui', 'fushoku'].includes(type)) {
+            const pat = getInfinitePattern(type);
+            const sX = 1/(obj.scaleX||1), sY = 1/(obj.scaleY||1), r = -(obj.angle||0)*Math.PI/180;
+            const cR = Math.cos(r), sR = Math.sin(r), ctr = obj.getCenterPoint(), s = 5000;
+            pat.patternTransform = [sX*cR, sX*sR, -sY*sR, sY*cR, (-ctr.x-s/2)*sX*cR+(ctr.y+s/2)*sX*sR, (-ctr.x-s/2)*sY*sR-(ctr.y+s/2)*sY*cR];
+            obj.set('fill', pat);
+        } else if (type==='hakuri'||type==='lime') {
+            const w=obj.getScaledWidth(), h=obj.getScaledHeight();
+            if (type==='hakuri') {
+                const inner = (obj.type==='rect') ? new fabric.Rect({width:w-20, height:h-20}) : new fabric.Ellipse({rx:Math.max(0,(w-20)/2), ry:Math.max(0,(h-20)/2)});
+                inner.set({ left: obj.left, top: obj.top, angle: obj.angle, originX: 'center', originY: 'center', fill: 'transparent', stroke: 'red', strokeDashArray: [5,5], selectable: false, evented: false, strokeUniform: true });
+                canvas.add(inner); obj._extra.push(inner);
+            } else if (type==='lime') {
+                const count = Math.floor(((w+h)*Math.PI/2)/25);
+                for(let i=0; i<count; i++){
+                    const a = (i/count)*Math.PI*2;
+                    const sx = obj.left + (w/2)*Math.cos(a + obj.angle*Math.PI/180), sy = obj.top + (h/2)*Math.sin(a + obj.angle*Math.PI/180);
+                    const vx = obj.left-sx, vy = obj.top-sy, dist = Math.sqrt(vx*vx+vy*vy);
+                    const l = new fabric.Line([sx, sy, sx+(vx/dist)*12, sy+(vy/dist)*12], { stroke: 'red', strokeWidth: 1.5, selectable: false, evented: false });
+                    canvas.add(l); obj._extra.push(l);
+                }
+            }
+        }
+    }
+    function handleAllUpdate(p) {
+        if (p.hatchType) applyLegend(p);
+        if (p.isFlag) {
+            const tipPos = { x: p.tip.left, y: p.tip.top };
+            const isRight = p.left > tipPos.x;
+            const jointX = isRight ? p.left-5 : p.left+p.getScaledWidth()+5;
+            const jointY = p.top + p.getScaledHeight()-2;
+            p.shoulder.set({ x1: jointX, y1: jointY, x2: isRight?jointX+130:jointX-130, y2: jointY });
+            p.leader.set({ x1: tipPos.x, y1: tipPos.y, x2: jointX, y2: jointY });
+        }
+        if (p.name === 'tip') {
+            const isRight = p.parentText.left > p.left;
+            const jointX = isRight ? p.parentText.left-5 : p.parentText.left+p.parentText.getScaledWidth()+5;
+            const jointY = p.parentText.top + p.parentText.getScaledHeight()-2;
+            p.line.set({ x1: p.left, y1: p.top, x2: jointX, y2: jointY });
+            p.parentText.shoulder.set({ x1: jointX, y1: jointY, x2: isRight?jointX+130:jointX-130, y2: jointY });
+        }
+        canvas.renderAll();
+    }
+    canvas.on({
+        'object:moving': (e) => handleAllUpdate(e.target),
+        'object:scaling': (e) => { if (e.target.hatchType) applyLegend(e.target); },
+        'object:rotating': (e) => { if (e.target.hatchType) applyLegend(e.target); },
+        'mouse:down': function(opt) {
+            const p = canvas.getPointer(opt.e);
+            const isHibi = document.getElementById('hatch-type').value === 'hibi_free';
+            if (activeMode === 'shape' && !isHibi) {
+                const props = { left: p.x, top: p.y, fill: 'transparent', stroke: 'red', strokeWidth: 2, strokeUniform: true, hatchType: document.getElementById('hatch-type').value, originX: 'center', originY: 'center' };
+                let obj = (document.getElementById('shape-type').value==='rect') ? new fabric.Rect({...props, width:140, height:80}) : new fabric.Ellipse({...props, rx:70, ry:40});
+                canvas.add(obj); applyLegend(obj); canvas.setActiveObject(obj); canvas._setupCurrentTransform(opt.e, obj, true); activeMode = null; updateUI();
+            } else if (activeMode === 'flag' && currentGrade) {
+                addFlag(select.value + " (" + currentGrade + ")", p.x, p.y);
+                const activeText = canvas.getObjects().slice(-2)[0]; canvas.setActiveObject(activeText); canvas._setupCurrentTransform(opt.e, activeText, true);
+                activeMode = null; document.getElementById('step-panel').style.display='none'; updateUI();
+            }
+        }
+    });
+    
+    // 旗追加用のIDカウンター
+    let flagIdCounter = 0;
+
+    function addFlag(label, x, y) {
+        flagIdCounter++;
+        const id = 'f' + flagIdCounter;
+        
+        const text = new fabric.IText(label + " [0枚]", { 
+            left: x + 15, top: y - 28, fontSize: 18, fontWeight: 'bold', fill: 'blue', 
+            hasControls: false, isFlag: true, flagId: label, photos: [], id: id 
+        });
+        const shoulder = new fabric.Line([x, y, x + 140, y], { 
+            stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-shoulder' 
+        });
+        const leader = new fabric.Line([x - 60, y + 60, x, y], { 
+            stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-leader' 
+        });
+        const tip = new fabric.Circle({ 
+            left: x - 60, top: y + 60, radius: 8, fill: 'blue', originX: 'center', originY: 'center', 
+            hasControls: false, hasBorders: false, name: 'tip', id: id + '-tip' 
+        });
+        
+        text.shoulder = shoulder; text.leader = leader; text.tip = tip; tip.parentText = text; tip.line = leader;
+        canvas.add(leader, shoulder, text, tip); canvas.renderAll();
+    }
+    
+    const getInfinitePattern = (type) => {
+        if (patternCache[type]) return patternCache[type];
+        const s = 5000; const pCanvas = document.createElement('canvas'); pCanvas.width = s; pCanvas.height = s; const ctx = pCanvas.getContext('2d');
+        ctx.strokeStyle = 'red'; ctx.lineWidth = 1.5;
+        let degs = (type==='tekin')?[-90]:(type==='uki')?[-90,0]:(type==='rousui')?[-45]:(type==='fushoku')?[35]:[];
+        degs.forEach(deg => {
+            const rad = deg * Math.PI / 180; const cos = Math.cos(rad); const sin = Math.sin(rad);
+            for (let i = -s; i <= s; i += PITCH) {
+                const x0 = s/2 + i * (-sin); const y0 = s/2 + i * cos;
+                ctx.beginPath(); ctx.moveTo(x0 - s*cos, y0 - s*sin); ctx.lineTo(x0 + s*cos, y0 + s*sin); ctx.stroke();
+            }
+        });
+        const pat = new fabric.Pattern({ source: pCanvas, repeat: 'no-repeat' }); patternCache[type] = pat; return pat;
+    };
+    const disp = document.getElementById('num-display');
+    function openNumpad() { document.getElementById('numpad-win').style.display = 'block'; disp.value = ''; }
+    function pressNum(val) { if (val === 'C') disp.value = ''; else if (val === 'DEL') disp.value = disp.value.slice(0, -1); else disp.value += val; }
+    function confirmDim() { if (!disp.value) return; const txt = new fabric.IText(disp.value, { left: 300, top: 300, fontSize: 24, fontWeight: 'bold', fill: '#000', backgroundColor: 'rgba(255,255,0,0.5)', padding: 5 }); canvas.add(txt).setActiveObject(txt); closeWin('numpad-win'); }
+    function closeWin(id) { document.getElementById(id).style.display = 'none'; }
+    function setGrade(btn, g) { currentGrade = g; document.querySelectorAll('.grade-group button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
+    function showGradeStep() { if (select.value) document.getElementById('grade-step').style.display = 'block'; }
+    function addFreeText() { canvas.add(new fabric.IText('テキスト入力', { left: 150, top: 150, fontSize: 20, fill: '#333' })); }
+    function deleteObject() { const a = canvas.getActiveObject(); if (a) { if (a.shoulder) canvas.remove(a.shoulder, a.leader, a.tip); if (a._extra) a._extra.forEach(e => canvas.remove(e)); canvas.remove(a); canvas.renderAll(); } }
+    function handleFiles(input) { const a = canvas.getActiveObject(); if (!a || !a.isFlag) return; Array.from(input.files).forEach(f => { const r = new FileReader(); r.onload = (e) => { a.photos.push(e.target.result); a.set('text', a.flagId + " [" + a.photos.length + "枚]"); canvas.renderAll(); }; r.readAsDataURL(f); }); }
+    canvas.on('mouse:dblclick', (opt) => {
+        if (opt.target && opt.target.isFlag) {
+            document.getElementById('pop-title').innerText = opt.target.flagId;
+            const c = document.getElementById('pop-img-container'); c.innerHTML = '';
+            opt.target.photos.forEach(s => { const i = document.createElement('img'); i.src = s; c.appendChild(i); });
+            document.getElementById('photo-overlay').style.display = 'block';
+        }
+    });
+
+    // --- Data Saving ---
+    function saveInspectionData() {
+        const json = canvas.toJSON(['hatchType', 'isFlag', 'flagId', 'photos', 'id', 'name']);
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(json));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "inspection_data.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        alert("データを保存したぜ！");
+    }
+
+    // --- Data Loading ---
+    function loadInspectionData(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const json = JSON.parse(e.target.result);
+            canvas.clear();
+            canvas.loadFromJSON(json, function() {
+                const objects = canvas.getObjects();
+                const flagTexts = objects.filter(obj => obj.isFlag);
+                flagTexts.forEach(textObj => {
+                    const id = textObj.id;
+                    const shoulder = objects.find(obj => obj.id === id + '-shoulder');
+                    const leader = objects.find(obj => obj.id === id + '-leader');
+                    const tip = objects.find(obj => obj.id === id + '-tip');
+                    if (shoulder && leader && tip) {
+                        textObj.shoulder = shoulder; textObj.leader = leader; textObj.tip = tip;
+                        tip.parentText = textObj; tip.line = leader;
+                        textObj.on('moving', () => handleAllUpdate(textObj));
+                        tip.on('moving', () => handleAllUpdate(tip));
+                    }
+                });
+                objects.forEach(obj => { if (obj.hatchType) applyLegend(obj); });
+                canvas.renderAll();
+                alert("データを読み込んだぜ！");
+            });
+        };
+        reader.readAsText(file);
+    }
+
+    // --- Screen & Window Management ---
+    function startInspection(rowId) {
+        const damageFile = document.getElementById(`damage-file-${rowId}`);
+        const reportFile = document.getElementById(`report-file-${rowId}`);
+        
+        if (damageFile.files.length === 0) { alert("損傷図PDFを選択してくれ！"); return; }
+        
+        // 前回の参照PDFを保存
+        currentReportFile = reportFile.files.length > 0 ? reportFile.files[0] : null;
+
+        loadDamagePdfToMainCanvas(damageFile.files[0]);
+        document.getElementById('opening-screen').style.display = 'none';
+        document.getElementById('main-application').style.display = 'flex';
+        canvas.setWidth(window.innerWidth - 230);
+        canvas.setHeight(window.innerHeight);
+    }
+    function backToDashboard() {
+        document.getElementById('opening-screen').style.display = 'flex';
+        document.getElementById('main-application').style.display = 'none';
+        canvas.clear();
+        canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
+    }
+
+    // 浮遊窓ドラッグ処理
+    [document.getElementById('numpad-win'), document.getElementById('photo-overlay'), document.getElementById('pdf-win')].forEach(win => {
+        const h = win.querySelector('.win-header'); let isD = false; let ox, oy;
+        h.onmousedown = (e) => { isD = true; ox = e.clientX - win.offsetLeft; oy = e.clientY - win.offsetTop; };
+        h.ontouchstart = (e) => { isD = true; const t = e.touches[0]; ox = t.clientX - win.offsetLeft; oy = t.clientY - win.offsetTop; };
+        window.addEventListener('mousemove', (e) => { if(isD){ win.style.left = (e.clientX-ox)+'px'; win.style.top = (e.clientY-oy)+'px'; }});
+        window.addEventListener('touchmove', (e) => { if(isD){ const t = e.touches[0]; win.style.left = (t.clientX-ox)+'px'; win.style.top = (t.clientY-oy)+'px'; }});
+        window.addEventListener('mouseup', () => isD = false); window.addEventListener('touchend', () => isD = false);
+    });
+
+    // --- PDF 保存機能 ---
+    function saveAsPDF() {
+        // キャンバスの内容を画像化
+        const dataURL = canvas.toDataURL({
+            format: 'png',
+            quality: 1.0,
+            multiplier: 1
+        });
+
+        // jsPDF インスタンス作成
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+            orientation: 'landscape', // 横向き
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
+
+        // 画像をPDFに追加
+        pdf.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
+        
+        // 保存
+        pdf.save("inspection_result.pdf");
+        alert("PDFをダウンロードしたぜ！前のソフトに読み込ませてくれ！");
+    }
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B-Logic v6.3 [PDF Export]</title>
+    <title>B-Logic v6.6 [Zoom Buttons]</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -26,8 +26,14 @@
         /* --- メイン画面 --- */
         #main-application { display: none; width: 100vw; height: 100vh; flex-direction: row; }
         #sidebar { width: 230px; background: #f8f9fa; padding: 10px; box-shadow: 2px 0 10px rgba(0,0,0,0.3); z-index: 10; height: 100vh; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
-        #canvas-container { flex-grow: 1; position: relative; background: #fff; }
         
+        /* --- canvasコンテナ：はみ出しを隠して拡大縮小の基礎にする --- */
+        #canvas-container { flex-grow: 1; position: relative; background: #333; overflow: hidden; cursor: grab; }
+        #canvas-container.grabbing { cursor: grabbing; }
+        
+        /* キャンバスはコンテナ内に固定 */
+        .canvas-container { position: absolute !important; top: 0; left: 0; }
+
         select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; font-weight: bold; background: #fff; }
         .main-btn { width: 100%; padding: 10px; cursor: pointer; border-radius: 8px; border: none; background: #007AFF; color: white; font-weight: bold; font-size: 14px; }
         .btn-green { background: #28a745; } .btn-orange { background: #ff9500; } .btn-red { background: #dc3545; } .btn-panel { background: #6c757d; }
@@ -63,6 +69,12 @@
         .pdf-overlay-controls span { color: white; display: flex; align-items: center; font-weight: bold; font-size: 12px; min-width: 50px; justify-content: center; }
 
         .active-mode { border: 3px solid #ff3b30 !important; background: #fff1f0 !important; }
+
+        /* ★ズームボタンのスタイル */
+        #zoom-controls { position: absolute; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 5px; }
+        #zoom-controls button { width: 50px; height: 50px; font-size: 24px; font-weight: bold; border-radius: 25px; border: none; background: rgba(0,0,0,0.5); color: white; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        #zoom-controls button:active { background: rgba(0,0,0,0.8); }
+
     </style>
 </head>
 <body>
@@ -98,7 +110,7 @@
 
 <div id="main-application">
     <div id="sidebar">
-        <h2 style="font-size: 16px; margin: 0; text-align: center;">B-Logic v6.3</h2>
+        <h2 style="font-size: 16px; margin: 0; text-align: center;">B-Logic v6.6</h2>
         <button class="main-btn btn-panel" onclick="backToDashboard()">◀ 案件選択へ戻る</button>
         <hr style="width:100%">
         
@@ -140,7 +152,14 @@
         <input type="file" id="file-input" style="display:none" accept="image/*" multiple onchange="handleFiles(this)">
     </div>
     
-    <div id="canvas-container"><canvas id="c"></canvas></div>
+    <div id="canvas-container">
+        <canvas id="c"></canvas>
+        <div id="zoom-controls">
+            <button onclick="zoomBtn(1.2)">＋</button>
+            <button onclick="zoomBtn(0.8)">ー</button>
+            <button onclick="resetViewport()" style="font-size:16px;">全景</button>
+        </div>
+    </div>
 </div>
 
 <div id="numpad-win" class="floating-win">
@@ -180,7 +199,7 @@
 
 <script>
     // --- Fabric.js Setup ---
-    const canvas = new fabric.Canvas('c', { width: window.innerWidth - 230, height: window.innerHeight, backgroundColor: '#fff' });
+    const canvas = new fabric.Canvas('c', { backgroundColor: '#fff', selection: true });
     const PITCH = 30; const patternCache = {};
     const damages = ["01:腐食", "02:亀裂", "03:ゆるみ・脱落", "04:破断", "05:防食機能の劣化", "06:ひびわれ", "07:剥離・鉄筋露出", "08:漏水・遊離石灰", "09:抜け落ち", "10:補修・補強材の損傷", "11:床板ひびわれ", "12:うき", "13:遊間の異常", "14:路面の凹凸", "15:舗装の異常", "16:支承部の機能障害", "17:その他", "18:定着部の異常", "19:変色・劣化", "20:漏水・帯水", "21:異常な音・振動", "22:異常なたわみ", "23:変形・欠損", "24:土砂詰まり", "25:沈下・移動・傾斜", "26:洗堀"];
     const select = document.getElementById('damage-type');
@@ -189,22 +208,12 @@
     let activeMode = null; let currentGrade = "";
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-    // 行追加用のカウンター
     let rowCounter = 1;
-
-    // --- テーブル編集・操作 ---
     function addRow() {
         const tbody = document.getElementById('table-body');
         const row = document.createElement('tr');
         const id = rowCounter++;
-
-        row.innerHTML = `
-            <td class="editable" contenteditable="true">新規構造物</td>
-            <td class="editable" contenteditable="true">${new Date().toLocaleDateString('ja-JP')}</td>
-            <td><input type="file" id="damage-file-${id}" accept=".pdf"></td>
-            <td><input type="file" id="report-file-${id}" accept=".pdf"></td>
-            <td><button class="main-btn btn-green" onclick="startInspection(${id})">点検開始</button></td>
-        `;
+        row.innerHTML = `<td class="editable" contenteditable="true">新規構造物</td><td class="editable" contenteditable="true">${new Date().toLocaleDateString('ja-JP')}</td><td><input type="file" id="damage-file-${id}" accept=".pdf"></td><td><input type="file" id="report-file-${id}" accept=".pdf"></td><td><button class="main-btn btn-green" onclick="startInspection(${id})">点検開始</button></td>`;
         tbody.appendChild(row);
     }
 
@@ -215,15 +224,18 @@
         reader.onload = function(e) {
             pdfjsLib.getDocument(new Uint8Array(e.target.result)).promise.then(function(pdfDoc_) {
                 pdfDoc_.getPage(1).then(function(page) {
-                    const viewport = page.getViewport({ scale: 1.5 });
+                    const viewport = page.getViewport({ scale: 2.0 });
                     const tempCanvas = document.createElement('canvas');
                     const tempCtx = tempCanvas.getContext('2d');
                     tempCanvas.height = viewport.height;
                     tempCanvas.width = viewport.width;
                     page.render({ canvasContext: tempCtx, viewport: viewport }).promise.then(function() {
+                        canvas.setWidth(viewport.width);
+                        canvas.setHeight(viewport.height);
                         fabric.Image.fromURL(tempCanvas.toDataURL(), function(img) {
                             img.set({ selectable: false, evented: false });
                             canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+                            resetViewport();
                         });
                     });
                 });
@@ -232,10 +244,69 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // --- 前回のPDF読み込み用グローバル変数 ---
-    let currentReportFile = null;
+    // --- ★ボタン操作ズーム・ドラッグ移動 (v6.6) ---
+    let isDragging = false;
+    let lastPosX, lastPosY;
+    let zoomLevel = 1;
+    const MAX_ZOOM = 5;
+    const MIN_ZOOM = 0.5;
+
+    // パンニング（移動）ロジック
+    canvas.on('mouse:down', function(opt) {
+        var evt = opt.e;
+        if (!canvas.isDrawingMode && !opt.target) {
+            isDragging = true;
+            canvas.selection = false;
+            // iPadのタッチ操作を優先
+            lastPosX = evt.clientX || (evt.touches ? evt.touches[0].clientX : 0);
+            lastPosY = evt.clientY || (evt.touches ? evt.touches[0].clientY : 0);
+            canvas.setCursor('grabbing');
+        }
+    });
+
+    canvas.on('mouse:move', function(opt) {
+        if (isDragging) {
+            var e = opt.e;
+            var vpt = canvas.viewportTransform;
+            let curX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+            let curY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+            
+            vpt[4] += curX - lastPosX;
+            vpt[5] += curY - lastPosY;
+            canvas.requestRenderAll();
+            lastPosX = curX;
+            lastPosY = curY;
+        }
+    });
+
+    canvas.on('mouse:up', function(opt) {
+        isDragging = false;
+        canvas.selection = true;
+        canvas.setCursor('default');
+    });
+
+    // ★ボタン用ズーム関数 (画面の中心を基準にズーム)
+    function zoomBtn(factor) {
+        const center = canvas.getCenter();
+        const point = new fabric.Point(center.left, center.top);
+        zoomLevel = canvas.getZoom() * factor;
+        
+        if (zoomLevel > MAX_ZOOM) zoomLevel = MAX_ZOOM;
+        if (zoomLevel < MIN_ZOOM) zoomLevel = MIN_ZOOM;
+        
+        canvas.zoomToPoint(point, zoomLevel);
+    }
+
+    // 視点リセット
+    function resetViewport() {
+        canvas.setZoom(1);
+        canvas.viewportTransform[4] = 0;
+        canvas.viewportTransform[5] = 0;
+        canvas.renderAll();
+    }
 
     // --- 前回調書PDFビューア (別窓) ---
+    let currentReportFile = null;
     let reportPdfDoc = null; let reportPageNum = 1; let reportScale = 1.0;
     const pdfContainer = document.getElementById('pdf-container');
     const pdfCanvas = document.getElementById('pdf-canvas'), ctx = pdfCanvas.getContext('2d');
@@ -254,6 +325,7 @@
     function openReportWindow() {
         if (!currentReportFile) { alert("前回調書PDFを選択してくれ！"); return; }
         document.getElementById('pdf-win').style.display = 'block';
+        reportScale = 1.0;
         const reader = new FileReader();
         reader.onload = function(e) {
             pdfjsLib.getDocument(new Uint8Array(e.target.result)).promise.then(function(pdfDoc_) {
@@ -268,21 +340,21 @@
     function prevPage() { if (reportPageNum <= 1) return; reportPageNum--; renderReportPage(reportPageNum); }
     function nextPage() { if (reportPageNum >= reportPdfDoc.numPages) return; reportPageNum++; renderReportPage(reportPageNum); }
 
-    // --- 参照PDFのドラッグ移動処理 (パンニング) ---
-    let isDragging = false; let startX, startY, scrollLeft, scrollTop;
+    // 参照PDFのパンニング
+    let isPdfDragging = false; let pStartX, pStartY, pScrollLeft, pScrollTop;
     pdfContainer.addEventListener('mousedown', (e) => {
         if (e.target.tagName === 'BUTTON') return;
-        isDragging = true; pdfContainer.classList.add('grabbing');
-        startX = e.pageX - pdfContainer.offsetLeft; startY = e.pageY - pdfContainer.offsetTop;
-        scrollLeft = pdfContainer.scrollLeft; scrollTop = pdfContainer.scrollTop;
+        isPdfDragging = true; pdfContainer.classList.add('grabbing');
+        pStartX = e.pageX - pdfContainer.offsetLeft; pStartY = e.pageY - pdfContainer.offsetTop;
+        pScrollLeft = pdfContainer.scrollLeft; pScrollTop = pdfContainer.scrollTop;
     });
-    window.addEventListener('mouseup', () => { isDragging = false; pdfContainer.classList.remove('grabbing'); });
+    window.addEventListener('mouseup', () => { isPdfDragging = false; pdfContainer.classList.remove('grabbing'); });
     pdfContainer.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
+        if (!isPdfDragging) return;
         e.preventDefault();
         const x = e.pageX - pdfContainer.offsetLeft; const y = e.pageY - pdfContainer.offsetTop;
-        pdfContainer.scrollLeft = scrollLeft - (x - startX);
-        pdfContainer.scrollTop = scrollTop - (y - startY);
+        pdfContainer.scrollLeft = pScrollLeft - (x - pStartX);
+        pdfContainer.scrollTop = pScrollTop - (y - pStartY);
     });
 
     // --- v5.5 描画エンジン (旗・図形・パターン) ---
@@ -361,11 +433,11 @@
         'mouse:down': function(opt) {
             const p = canvas.getPointer(opt.e);
             const isHibi = document.getElementById('hatch-type').value === 'hibi_free';
-            if (activeMode === 'shape' && !isHibi) {
+            if (activeMode === 'shape' && !isHibi && !opt.target) {
                 const props = { left: p.x, top: p.y, fill: 'transparent', stroke: 'red', strokeWidth: 2, strokeUniform: true, hatchType: document.getElementById('hatch-type').value, originX: 'center', originY: 'center' };
                 let obj = (document.getElementById('shape-type').value==='rect') ? new fabric.Rect({...props, width:140, height:80}) : new fabric.Ellipse({...props, rx:70, ry:40});
                 canvas.add(obj); applyLegend(obj); canvas.setActiveObject(obj); canvas._setupCurrentTransform(opt.e, obj, true); activeMode = null; updateUI();
-            } else if (activeMode === 'flag' && currentGrade) {
+            } else if (activeMode === 'flag' && currentGrade && !opt.target) {
                 addFlag(select.value + " (" + currentGrade + ")", p.x, p.y);
                 const activeText = canvas.getObjects().slice(-2)[0]; canvas.setActiveObject(activeText); canvas._setupCurrentTransform(opt.e, activeText, true);
                 activeMode = null; document.getElementById('step-panel').style.display='none'; updateUI();
@@ -373,28 +445,14 @@
         }
     });
     
-    // 旗追加用のIDカウンター
     let flagIdCounter = 0;
-
     function addFlag(label, x, y) {
         flagIdCounter++;
         const id = 'f' + flagIdCounter;
-        
-        const text = new fabric.IText(label + " [0枚]", { 
-            left: x + 15, top: y - 28, fontSize: 18, fontWeight: 'bold', fill: 'blue', 
-            hasControls: false, isFlag: true, flagId: label, photos: [], id: id 
-        });
-        const shoulder = new fabric.Line([x, y, x + 140, y], { 
-            stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-shoulder' 
-        });
-        const leader = new fabric.Line([x - 60, y + 60, x, y], { 
-            stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-leader' 
-        });
-        const tip = new fabric.Circle({ 
-            left: x - 60, top: y + 60, radius: 8, fill: 'blue', originX: 'center', originY: 'center', 
-            hasControls: false, hasBorders: false, name: 'tip', id: id + '-tip' 
-        });
-        
+        const text = new fabric.IText(label + " [0枚]", { left: x + 15, top: y - 28, fontSize: 18, fontWeight: 'bold', fill: 'blue', hasControls: false, isFlag: true, flagId: label, photos: [], id: id });
+        const shoulder = new fabric.Line([x, y, x + 140, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-shoulder' });
+        const leader = new fabric.Line([x - 60, y + 60, x, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-leader' });
+        const tip = new fabric.Circle({ left: x - 60, top: y + 60, radius: 8, fill: 'blue', originX: 'center', originY: 'center', hasControls: false, hasBorders: false, name: 'tip', id: id + '-tip' });
         text.shoulder = shoulder; text.leader = leader; text.tip = tip; tip.parentText = text; tip.line = leader;
         canvas.add(leader, shoulder, text, tip); canvas.renderAll();
     }
@@ -453,6 +511,10 @@
         reader.onload = function(e) {
             const json = JSON.parse(e.target.result);
             canvas.clear();
+            if(json.backgroundImage) {
+                canvas.setWidth(json.backgroundImage.width);
+                canvas.setHeight(json.backgroundImage.height);
+            }
             canvas.loadFromJSON(json, function() {
                 const objects = canvas.getObjects();
                 const flagTexts = objects.filter(obj => obj.isFlag);
@@ -480,17 +542,11 @@
     function startInspection(rowId) {
         const damageFile = document.getElementById(`damage-file-${rowId}`);
         const reportFile = document.getElementById(`report-file-${rowId}`);
-        
         if (damageFile.files.length === 0) { alert("損傷図PDFを選択してくれ！"); return; }
-        
-        // 前回の参照PDFを保存
         currentReportFile = reportFile.files.length > 0 ? reportFile.files[0] : null;
-
         loadDamagePdfToMainCanvas(damageFile.files[0]);
         document.getElementById('opening-screen').style.display = 'none';
         document.getElementById('main-application').style.display = 'flex';
-        canvas.setWidth(window.innerWidth - 230);
-        canvas.setHeight(window.innerHeight);
     }
     function backToDashboard() {
         document.getElementById('opening-screen').style.display = 'flex';
@@ -511,27 +567,20 @@
 
     // --- PDF 保存機能 ---
     function saveAsPDF() {
-        // キャンバスの内容を画像化
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+            orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
         const dataURL = canvas.toDataURL({
             format: 'png',
             quality: 1.0,
             multiplier: 1
         });
-
-        // jsPDF インスタンス作成
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-            orientation: 'landscape', // 横向き
-            unit: 'px',
-            format: [canvas.width, canvas.height]
-        });
-
-        // 画像をPDFに追加
         pdf.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
-        
-        // 保存
         pdf.save("inspection_result.pdf");
-        alert("PDFをダウンロードしたぜ！前のソフトに読み込ませてくれ！");
+        alert("PDFをダウンロードしたぜ！");
     }
 </script>
 </body>

@@ -3,63 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B-Logic v6.6 [Zoom Buttons]</title>
+    <title>B-Logic v6.7 [Layer System]</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore-compat.js"></script>
+
     <style>
         body { margin: 0; background: #333; font-family: sans-serif; overflow: hidden; touch-action: none; }
-        
-        /* --- オープニング画面 --- */
         #opening-screen { width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #333; color: white; padding: 20px; box-sizing: border-box; }
         #project-table-container { width: 90%; max-width: 1000px; display: flex; flex-direction: column; gap: 10px; }
         #project-table { background: white; color: #333; border-radius: 12px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         #project-table table { width: 100%; border-collapse: collapse; }
         #project-table th, #project-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
         #project-table th { background: #444; color: white; }
-        
-        /* 編集可能なセル */
         .editable { cursor: pointer; border: 1px transparent solid; }
         .editable:hover { background-color: #f0f0f0; border: 1px #ccc solid; border-radius: 4px; }
         .editable:focus { background-color: #fff; border: 1px #007AFF solid; outline: none; }
-
-        /* --- メイン画面 --- */
         #main-application { display: none; width: 100vw; height: 100vh; flex-direction: row; }
         #sidebar { width: 230px; background: #f8f9fa; padding: 10px; box-shadow: 2px 0 10px rgba(0,0,0,0.3); z-index: 10; height: 100vh; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
-        
-        /* --- canvasコンテナ：はみ出しを隠して拡大縮小の基礎にする --- */
         #canvas-container { flex-grow: 1; position: relative; background: #333; overflow: hidden; cursor: grab; }
         #canvas-container.grabbing { cursor: grabbing; }
-        
-        /* キャンバスはコンテナ内に固定 */
         .canvas-container { position: absolute !important; top: 0; left: 0; }
-
         select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; font-weight: bold; background: #fff; }
         .main-btn { width: 100%; padding: 10px; cursor: pointer; border-radius: 8px; border: none; background: #007AFF; color: white; font-weight: bold; font-size: 14px; }
         .btn-green { background: #28a745; } .btn-orange { background: #ff9500; } .btn-red { background: #dc3545; } .btn-panel { background: #6c757d; }
-
         .grade-group { display: flex; gap: 4px; }
         .grade-group button { flex: 1; padding: 8px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 16px; }
         .grade-group button.active { background: #ff9500 !important; color: white !important; }
-
-        /* --- 浮遊窓 (共通) --- */
         .floating-win { display: none; position: fixed; background: white; z-index: 100; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); overflow: hidden; }
         .win-header { background: #444; color: white; padding: 8px; cursor: move; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
         .win-header button { background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
-        
-        /* 寸法入力パッド */
         #numpad-win { width: 240px; top: 100px; left: 260px; }
         .num-display { width: 100%; height: 40px; background: #eee; border: none; text-align: right; font-size: 20px; padding: 5px; box-sizing: border-box; }
         .num-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px; }
         .num-grid button { padding: 10px; font-size: 18px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
         .num-grid .btn-enter { background: #007AFF; color: white; grid-column: span 3; }
-
-        /* 写真オーバーレイ */
         #photo-overlay { width: 350px; height: 450px; top: 50px; left: 550px; resize: both; }
         #pop-img-container { height: calc(100% - 35px); overflow-y: auto; padding: 10px; background: #eee; }
         #pop-img-container img { width: 100%; border-radius: 4px; margin-bottom: 10px; }
-
-        /* 前回調書PDFビューア */
         #pdf-win { width: 600px; height: 800px; top: 50px; left: 300px; resize: both; min-width: 300px; min-height: 400px; }
         #pdf-container { height: calc(100% - 35px); width: 100%; overflow: auto; background: #ccc; display:block; cursor: grab; position: relative; }
         #pdf-container.grabbing { cursor: grabbing; }
@@ -67,14 +51,12 @@
         .pdf-overlay-controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0, 0, 0, 0.6); padding: 5px; border-radius: 25px; z-index: 101; }
         .pdf-overlay-controls button { padding: 5px 10px; cursor: pointer; border-radius: 20px; border: none; background: white; font-weight: bold; font-size: 12px; }
         .pdf-overlay-controls span { color: white; display: flex; align-items: center; font-weight: bold; font-size: 12px; min-width: 50px; justify-content: center; }
-
         .active-mode { border: 3px solid #ff3b30 !important; background: #fff1f0 !important; }
-
-        /* ★ズームボタンのスタイル */
         #zoom-controls { position: absolute; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 5px; }
         #zoom-controls button { width: 50px; height: 50px; font-size: 24px; font-weight: bold; border-radius: 25px; border: none; background: rgba(0,0,0,0.5); color: white; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         #zoom-controls button:active { background: rgba(0,0,0,0.8); }
-
+        .layer-box { display: flex; gap: 5px; margin-top: 5px; }
+        .layer-box button { flex: 1; padding: 5px; font-size: 12px; cursor: pointer; border-radius: 4px; border: none; }
     </style>
 </head>
 <body>
@@ -110,11 +92,19 @@
 
 <div id="main-application">
     <div id="sidebar">
-        <h2 style="font-size: 16px; margin: 0; text-align: center;">B-Logic v6.6</h2>
+        <h2 style="font-size: 16px; margin: 0; text-align: center;">B-Logic v6.7</h2>
         <button class="main-btn btn-panel" onclick="backToDashboard()">◀ 案件選択へ戻る</button>
         <hr style="width:100%">
         
-        <div id="shape-mode-panel" style="background:#eee; padding:5px; border-radius:8px; border: 2px solid transparent;">
+        <div style="background:#ddd; padding:5px; border-radius:8px;">
+            <span style="font-size:12px; font-weight:bold;">● 現在の描画レイヤー</span>
+            <div class="layer-box">
+                <button id="layer-a" style="background:#007AFF; color:white;" onclick="setLayer('userA')">Aさん</button>
+                <button id="layer-b" style="background:#eee;" onclick="setLayer('userB')">Bさん</button>
+            </div>
+        </div>
+
+        <div id="shape-mode-panel" style="background:#eee; padding:5px; border-radius:8px; border: 2px solid transparent; margin-top:5px;">
             <span style="font-size:11px; font-weight:bold; color:#007AFF;">図面記号</span>
             <select id="shape-type"><option value="ellipse">楕円形</option><option value="rect">長方形</option></select>
             <select id="hatch-type" style="margin-top:4px;">
@@ -141,9 +131,8 @@
         <button class="main-btn btn-green" onclick="document.getElementById('file-input').click()">📷 写真追加</button>
         <button class="main-btn btn-panel" onclick="openReportWindow()">📄 前回調書を表示</button>
         
-        <button class="main-btn" style="background: #343a40; margin-top: 10px;" onclick="saveInspectionData()">💾 データ保存 (JSON)</button>
-        <button class="main-btn" style="background: #5a6268; margin-top: 5px;" onclick="document.getElementById('load-json-input').click()">📂 データ読み込み</button>
-        <input type="file" id="load-json-input" style="display:none" accept=".json" onchange="loadInspectionData(this)">
+        <button class="main-btn" style="background: #343a40; margin-top: 10px;" onclick="saveLayeredDataFirebase()">💾 レイヤー保存</button>
+        <button class="main-btn" style="background: #5a6268; margin-top: 5px;" onclick="loadAndMergeDataFirebase()">📂 他レイヤー読込・統合</button>
         
         <button class="main-btn btn-red" onclick="deleteObject()">選択削除</button>
         
@@ -205,6 +194,9 @@
     const select = document.getElementById('damage-type');
     damages.forEach(d => { let opt = document.createElement('option'); opt.value = d; opt.innerText = d; select.appendChild(opt); });
 
+    // ★現在のユーザー（レイヤー）
+    let currentLayer = 'userA';
+
     let activeMode = null; let currentGrade = "";
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
@@ -215,6 +207,16 @@
         const id = rowCounter++;
         row.innerHTML = `<td class="editable" contenteditable="true">新規構造物</td><td class="editable" contenteditable="true">${new Date().toLocaleDateString('ja-JP')}</td><td><input type="file" id="damage-file-${id}" accept=".pdf"></td><td><input type="file" id="report-file-${id}" accept=".pdf"></td><td><button class="main-btn btn-green" onclick="startInspection(${id})">点検開始</button></td>`;
         tbody.appendChild(row);
+    }
+
+    // ★レイヤー切り替え関数
+    function setLayer(layer) {
+        currentLayer = layer;
+        document.getElementById('layer-a').style.background = (layer === 'userA') ? '#007AFF' : '#eee';
+        document.getElementById('layer-a').style.color = (layer === 'userA') ? 'white' : 'black';
+        document.getElementById('layer-b').style.background = (layer === 'userB') ? '#007AFF' : '#eee';
+        document.getElementById('layer-b').style.color = (layer === 'userB') ? 'white' : 'black';
+        alert(layer + " のレイヤーに切り替えたぜ！");
     }
 
     // --- 背景図面の読み込み (損傷図) ---
@@ -233,7 +235,7 @@
                         canvas.setWidth(viewport.width);
                         canvas.setHeight(viewport.height);
                         fabric.Image.fromURL(tempCanvas.toDataURL(), function(img) {
-                            img.set({ selectable: false, evented: false });
+                            img.set({ selectable: false, evented: false, layerId: 'background' }); // 背景も識別
                             canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
                             resetViewport();
                         });
@@ -244,20 +246,18 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // --- ★ボタン操作ズーム・ドラッグ移動 (v6.6) ---
+    // --- パンニング（移動）ロジック ---
     let isDragging = false;
     let lastPosX, lastPosY;
     let zoomLevel = 1;
     const MAX_ZOOM = 5;
     const MIN_ZOOM = 0.5;
 
-    // パンニング（移動）ロジック
     canvas.on('mouse:down', function(opt) {
         var evt = opt.e;
         if (!canvas.isDrawingMode && !opt.target) {
             isDragging = true;
             canvas.selection = false;
-            // iPadのタッチ操作を優先
             lastPosX = evt.clientX || (evt.touches ? evt.touches[0].clientX : 0);
             lastPosY = evt.clientY || (evt.touches ? evt.touches[0].clientY : 0);
             canvas.setCursor('grabbing');
@@ -270,7 +270,6 @@
             var vpt = canvas.viewportTransform;
             let curX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
             let curY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
-            
             vpt[4] += curX - lastPosX;
             vpt[5] += curY - lastPosY;
             canvas.requestRenderAll();
@@ -285,15 +284,13 @@
         canvas.setCursor('default');
     });
 
-    // ★ボタン用ズーム関数 (画面の中心を基準にズーム)
+    // ★ズーム関数
     function zoomBtn(factor) {
         const center = canvas.getCenter();
         const point = new fabric.Point(center.left, center.top);
         zoomLevel = canvas.getZoom() * factor;
-        
         if (zoomLevel > MAX_ZOOM) zoomLevel = MAX_ZOOM;
         if (zoomLevel < MIN_ZOOM) zoomLevel = MIN_ZOOM;
-        
         canvas.zoomToPoint(point, zoomLevel);
     }
 
@@ -305,7 +302,7 @@
         canvas.renderAll();
     }
 
-    // --- 前回調書PDFビューア (別窓) ---
+    // --- 前回調書PDFビューア ---
     let currentReportFile = null;
     let reportPdfDoc = null; let reportPageNum = 1; let reportScale = 1.0;
     const pdfContainer = document.getElementById('pdf-container');
@@ -340,7 +337,7 @@
     function prevPage() { if (reportPageNum <= 1) return; reportPageNum--; renderReportPage(reportPageNum); }
     function nextPage() { if (reportPageNum >= reportPdfDoc.numPages) return; reportPageNum++; renderReportPage(reportPageNum); }
 
-    // 参照PDFのパンニング
+    // PDF パンニング
     let isPdfDragging = false; let pStartX, pStartY, pScrollLeft, pScrollTop;
     pdfContainer.addEventListener('mousedown', (e) => {
         if (e.target.tagName === 'BUTTON') return;
@@ -357,7 +354,7 @@
         pdfContainer.scrollTop = pScrollTop - (y - pStartY);
     });
 
-    // --- v5.5 描画エンジン (旗・図形・パターン) ---
+    // --- 描画エンジン (v5.5 + レイヤー機能) ---
     function toggleShapeMode() {
         activeMode = (activeMode === 'shape') ? null : 'shape';
         const isHibi = document.getElementById('hatch-type').value === 'hibi_free';
@@ -368,7 +365,9 @@
         }
         updateUI();
     }
-    canvas.on('path:created', function() {
+    canvas.on('path:created', function(e) {
+        // ★描画されたオブジェクトに現在のレイヤーIDを付与
+        e.path.set({ layerId: currentLayer });
         if (activeMode === 'shape' && canvas.isDrawingMode) { activeMode = null; canvas.isDrawingMode = false; updateUI(); }
     });
     function toggleStepPanel() { const p = document.getElementById('step-panel'); activeMode = (p.style.display==='block')?null:'flag'; p.style.display = (activeMode==='flag')?'block':'none'; canvas.isDrawingMode = false; updateUI(); }
@@ -434,7 +433,7 @@
             const p = canvas.getPointer(opt.e);
             const isHibi = document.getElementById('hatch-type').value === 'hibi_free';
             if (activeMode === 'shape' && !isHibi && !opt.target) {
-                const props = { left: p.x, top: p.y, fill: 'transparent', stroke: 'red', strokeWidth: 2, strokeUniform: true, hatchType: document.getElementById('hatch-type').value, originX: 'center', originY: 'center' };
+                const props = { left: p.x, top: p.y, fill: 'transparent', stroke: 'red', strokeWidth: 2, strokeUniform: true, hatchType: document.getElementById('hatch-type').value, originX: 'center', originY: 'center', layerId: currentLayer };
                 let obj = (document.getElementById('shape-type').value==='rect') ? new fabric.Rect({...props, width:140, height:80}) : new fabric.Ellipse({...props, rx:70, ry:40});
                 canvas.add(obj); applyLegend(obj); canvas.setActiveObject(obj); canvas._setupCurrentTransform(opt.e, obj, true); activeMode = null; updateUI();
             } else if (activeMode === 'flag' && currentGrade && !opt.target) {
@@ -449,10 +448,11 @@
     function addFlag(label, x, y) {
         flagIdCounter++;
         const id = 'f' + flagIdCounter;
-        const text = new fabric.IText(label + " [0枚]", { left: x + 15, top: y - 28, fontSize: 18, fontWeight: 'bold', fill: 'blue', hasControls: false, isFlag: true, flagId: label, photos: [], id: id });
-        const shoulder = new fabric.Line([x, y, x + 140, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-shoulder' });
-        const leader = new fabric.Line([x - 60, y + 60, x, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-leader' });
-        const tip = new fabric.Circle({ left: x - 60, top: y + 60, radius: 8, fill: 'blue', originX: 'center', originY: 'center', hasControls: false, hasBorders: false, name: 'tip', id: id + '-tip' });
+        // ★旗のグループ全体にlayerIdを付与（実際はtextに付与し、load時に他を紐付ける）
+        const text = new fabric.IText(label + " [0枚]", { left: x + 15, top: y - 28, fontSize: 18, fontWeight: 'bold', fill: 'blue', hasControls: false, isFlag: true, flagId: label, photos: [], id: id, layerId: currentLayer });
+        const shoulder = new fabric.Line([x, y, x + 140, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-shoulder', layerId: currentLayer });
+        const leader = new fabric.Line([x - 60, y + 60, x, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-leader', layerId: currentLayer });
+        const tip = new fabric.Circle({ left: x - 60, top: y + 60, radius: 8, fill: 'blue', originX: 'center', originY: 'center', hasControls: false, hasBorders: false, name: 'tip', id: id + '-tip', layerId: currentLayer });
         text.shoulder = shoulder; text.leader = leader; text.tip = tip; tip.parentText = text; tip.line = leader;
         canvas.add(leader, shoulder, text, tip); canvas.renderAll();
     }
@@ -474,12 +474,15 @@
     const disp = document.getElementById('num-display');
     function openNumpad() { document.getElementById('numpad-win').style.display = 'block'; disp.value = ''; }
     function pressNum(val) { if (val === 'C') disp.value = ''; else if (val === 'DEL') disp.value = disp.value.slice(0, -1); else disp.value += val; }
-    function confirmDim() { if (!disp.value) return; const txt = new fabric.IText(disp.value, { left: 300, top: 300, fontSize: 24, fontWeight: 'bold', fill: '#000', backgroundColor: 'rgba(255,255,0,0.5)', padding: 5 }); canvas.add(txt).setActiveObject(txt); closeWin('numpad-win'); }
+    function confirmDim() { if (!disp.value) return; const txt = new fabric.IText(disp.value, { left: 300, top: 300, fontSize: 24, fontWeight: 'bold', fill: '#000', backgroundColor: 'rgba(255,255,0,0.5)', padding: 5, layerId: currentLayer }); canvas.add(txt).setActiveObject(txt); closeWin('numpad-win'); }
     function closeWin(id) { document.getElementById(id).style.display = 'none'; }
     function setGrade(btn, g) { currentGrade = g; document.querySelectorAll('.grade-group button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
     function showGradeStep() { if (select.value) document.getElementById('grade-step').style.display = 'block'; }
-    function addFreeText() { canvas.add(new fabric.IText('テキスト入力', { left: 150, top: 150, fontSize: 20, fill: '#333' })); }
+    function addFreeText() { canvas.add(new fabric.IText('テキスト入力', { left: 150, top: 150, fontSize: 20, fill: '#333', layerId: currentLayer })); }
+    
+    // ★削除機能の強化：自分のレイヤーしか消せないようにする？（今回は一旦全部消せるようにするが、layerId付きで保存する）
     function deleteObject() { const a = canvas.getActiveObject(); if (a) { if (a.shoulder) canvas.remove(a.shoulder, a.leader, a.tip); if (a._extra) a._extra.forEach(e => canvas.remove(e)); canvas.remove(a); canvas.renderAll(); } }
+    
     function handleFiles(input) { const a = canvas.getActiveObject(); if (!a || !a.isFlag) return; Array.from(input.files).forEach(f => { const r = new FileReader(); r.onload = (e) => { a.photos.push(e.target.result); a.set('text', a.flagId + " [" + a.photos.length + "枚]"); canvas.renderAll(); }; r.readAsDataURL(f); }); }
     canvas.on('mouse:dblclick', (opt) => {
         if (opt.target && opt.target.isFlag) {
@@ -490,52 +493,98 @@
         }
     });
 
-    // --- Data Saving ---
-    function saveInspectionData() {
-        const json = canvas.toJSON(['hatchType', 'isFlag', 'flagId', 'photos', 'id', 'name']);
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(json));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "inspection_data.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-        alert("データを保存したぜ！");
+    // --- ★Firebase レイヤー対応連携処理 ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyAyyafLY-Nccm-yI8SdwtVAbZaWRvDwXes",
+      authDomain: "bridge-inspection-tool.firebaseapp.com",
+      projectId: "bridge-inspection-tool",
+      storageBucket: "bridge-inspection-tool.firebasestorage.app",
+      messagingSenderId: "95922818409",
+      appId: "1:95922818409:web:f0a5cc4c936da1812641f8",
+      measurementId: "G-YHL02XYCN2"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const docId = "test-project-001"; // 同じドキュメントを使う
+
+    function saveLayeredDataFirebase() {
+        // 現在のキャンバス上の全データを取得し、JSON化
+        const json = canvas.toJSON(['hatchType', 'isFlag', 'flagId', 'photos', 'id', 'name', 'layerId']);
+        
+        // ★Firestoreに保存するデータを「ユーザー別」にする
+        db.collection("layered_inspections").doc(docId).set({
+            [currentLayer]: JSON.stringify(json), // 例: { "userA": "..." } の形式で保存
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }) // ★マージして保存（他のユーザーのデータを上書きしない）
+        .then(() => {
+            alert(currentLayer + " のデータをFirebaseに保存したぜ！");
+        })
+        .catch((error) => {
+            alert("保存失敗だぜ...: " + error);
+        });
     }
 
-    // --- Data Loading ---
-    function loadInspectionData(input) {
-        const file = input.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const json = JSON.parse(e.target.result);
-            canvas.clear();
-            if(json.backgroundImage) {
-                canvas.setWidth(json.backgroundImage.width);
-                canvas.setHeight(json.backgroundImage.height);
-            }
-            canvas.loadFromJSON(json, function() {
-                const objects = canvas.getObjects();
-                const flagTexts = objects.filter(obj => obj.isFlag);
-                flagTexts.forEach(textObj => {
-                    const id = textObj.id;
-                    const shoulder = objects.find(obj => obj.id === id + '-shoulder');
-                    const leader = objects.find(obj => obj.id === id + '-leader');
-                    const tip = objects.find(obj => obj.id === id + '-tip');
-                    if (shoulder && leader && tip) {
-                        textObj.shoulder = shoulder; textObj.leader = leader; textObj.tip = tip;
-                        tip.parentText = textObj; tip.line = leader;
-                        textObj.on('moving', () => handleAllUpdate(textObj));
-                        tip.on('moving', () => handleAllUpdate(tip));
+    function loadAndMergeDataFirebase() {
+        db.collection("layered_inspections").doc(docId).get()
+        .then((doc) => {
+            if (doc.exists) {
+                const docData = doc.data();
+                
+                // --- 1. 背景図面だけを残してクリア ---
+                const bgImage = canvas.backgroundImage;
+                canvas.clear();
+                canvas.setBackgroundImage(bgImage, canvas.renderAll.bind(canvas));
+
+                // --- 2. 保存されている全レイヤーデータを取得してロード ---
+                for (const userId in docData) {
+                    if (userId === 'updatedAt') continue;
+                    
+                    const jsonData = JSON.parse(docData[userId]);
+                    
+                    // 背景情報は無視（最初の背景だけで良い）
+                    if (jsonData.backgroundImage) {
+                        if (!canvas.backgroundImage) {
+                            // もし背景がなければ読み込む
+                            // (本来はここもマージ処理が必要だが、一旦簡略化)
+                        }
                     }
-                });
-                objects.forEach(obj => { if (obj.hatchType) applyLegend(obj); });
-                canvas.renderAll();
-                alert("データを読み込んだぜ！");
-            });
-        };
-        reader.readAsText(file);
+
+                    // データをロード
+                    canvas.loadFromJSON(jsonData, function() {
+                        // ロード後のFabricオブジェクト再構築処理
+                        rebuildObjects();
+                        canvas.renderAll();
+                    });
+                }
+                alert("他の人のレイヤーを統合したぜ！");
+            } else {
+                alert("データが見つからないぜ。");
+            }
+        })
+        .catch((error) => {
+            alert("読み込み失敗だぜ...: " + error);
+        });
+    }
+    
+    // ロード後のオブジェクト紐付け処理（旗など）
+    function rebuildObjects() {
+        const objects = canvas.getObjects();
+        objects.forEach(obj => {
+            if (obj.hatchType) applyLegend(obj); // パターン再適用
+            
+            // 旗の紐付け
+            if (obj.isFlag) {
+                const id = obj.id;
+                obj.shoulder = objects.find(o => o.id === id + '-shoulder');
+                obj.leader = objects.find(o => o.id === id + '-leader');
+                obj.tip = objects.find(o => o.id === id + '-tip');
+                if (obj.tip) {
+                    obj.tip.parentText = obj;
+                    obj.tip.line = obj.leader;
+                }
+            }
+        });
     }
 
     // --- Screen & Window Management ---
@@ -579,7 +628,7 @@
             multiplier: 1
         });
         pdf.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
-        pdf.save("inspection_result.pdf");
+        pdf.save("layered_inspection_result.pdf");
         alert("PDFをダウンロードしたぜ！");
     }
 </script>

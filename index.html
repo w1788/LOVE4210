@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B-Logic v6.7 [Layer System]</title>
+    <title>B-Logic v7.0 [UI TuneUp]</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -12,7 +12,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore-compat.js"></script>
 
     <style>
-        body { margin: 0; background: #333; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        /* ★全体的にフォントサイズを少し拡大 */
+        body { margin: 0; background: #333; font-family: sans-serif; overflow: hidden; touch-action: none; font-size: 16px; }
         #opening-screen { width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #333; color: white; padding: 20px; box-sizing: border-box; }
         #project-table-container { width: 90%; max-width: 1000px; display: flex; flex-direction: column; gap: 10px; }
         #project-table { background: white; color: #333; border-radius: 12px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
@@ -22,41 +23,54 @@
         .editable { cursor: pointer; border: 1px transparent solid; }
         .editable:hover { background-color: #f0f0f0; border: 1px #ccc solid; border-radius: 4px; }
         .editable:focus { background-color: #fff; border: 1px #007AFF solid; outline: none; }
-        #main-application { display: none; width: 100vw; height: 100vh; flex-direction: row; }
-        #sidebar { width: 230px; background: #f8f9fa; padding: 10px; box-shadow: 2px 0 10px rgba(0,0,0,0.3); z-index: 10; height: 100vh; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
-        #canvas-container { flex-grow: 1; position: relative; background: #333; overflow: hidden; cursor: grab; }
-        #canvas-container.grabbing { cursor: grabbing; }
+        
+        #main-application { display: none; width: 100vw; height: 100vh; flex-direction: column; }
+        
+        #top-navbar { height: 60px; background: #222; color: white; display: flex; align-items: center; padding: 0 10px; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.5); z-index: 10; }
+        #top-navbar .group { display: flex; gap: 8px; align-items: center; }
+        .top-btn { padding: 10px 15px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; font-size: 15px; }
+        .btn-layer { background: #555; color: white; }
+        .btn-layer.active { background: #007AFF; }
+        
+        #content-area { flex-grow: 1; display: flex; overflow: hidden; }
+        
+        #sidebar { width: 250px; background: #f8f9fa; padding: 10px; box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 10; height: 100%; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+        
+        #canvas-container { flex-grow: 1; position: relative; background: #333; overflow: hidden; }
         .canvas-container { position: absolute !important; top: 0; left: 0; }
-        select { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; font-weight: bold; background: #fff; }
-        .main-btn { width: 100%; padding: 10px; cursor: pointer; border-radius: 8px; border: none; background: #007AFF; color: white; font-weight: bold; font-size: 14px; }
+        
+        select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px; font-weight: bold; background: #fff; }
+        .main-btn { width: 100%; padding: 12px; cursor: pointer; border-radius: 8px; border: none; background: #007AFF; color: white; font-weight: bold; font-size: 15px; }
         .btn-green { background: #28a745; } .btn-orange { background: #ff9500; } .btn-red { background: #dc3545; } .btn-panel { background: #6c757d; }
         .grade-group { display: flex; gap: 4px; }
-        .grade-group button { flex: 1; padding: 8px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 16px; }
+        .grade-group button { flex: 1; padding: 10px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 16px; }
         .grade-group button.active { background: #ff9500 !important; color: white !important; }
-        .floating-win { display: none; position: fixed; background: white; z-index: 100; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); overflow: hidden; }
-        .win-header { background: #444; color: white; padding: 8px; cursor: move; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
-        .win-header button { background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
-        #numpad-win { width: 240px; top: 100px; left: 260px; }
-        .num-display { width: 100%; height: 40px; background: #eee; border: none; text-align: right; font-size: 20px; padding: 5px; box-sizing: border-box; }
+        .floating-win { display: none; position: fixed; background: white; z-index: 100; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); overflow: hidden; max-width: 95vw; max-height: 90vh; }
+        .win-header { background: #444; color: white; padding: 10px; cursor: move; display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+        .win-header button { background: none; border: none; color: white; font-size: 20px; cursor: pointer; }
+        #numpad-win { width: 260px; top: 100px; left: 280px; }
+        .num-display { width: 100%; height: 50px; background: #eee; border: none; text-align: right; font-size: 24px; padding: 5px; box-sizing: border-box; }
         .num-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px; }
-        .num-grid button { padding: 10px; font-size: 18px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        .num-grid button { padding: 15px; font-size: 20px; font-weight: bold; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
         .num-grid .btn-enter { background: #007AFF; color: white; grid-column: span 3; }
-        #photo-overlay { width: 350px; height: 450px; top: 50px; left: 550px; resize: both; }
-        #pop-img-container { height: calc(100% - 35px); overflow-y: auto; padding: 10px; background: #eee; }
+        #photo-overlay { width: 380px; height: 500px; top: 50px; left: 550px; resize: both; }
+        #pop-img-container { height: calc(100% - 40px); overflow-y: auto; padding: 10px; background: #eee; }
         #pop-img-container img { width: 100%; border-radius: 4px; margin-bottom: 10px; }
-        #pdf-win { width: 600px; height: 800px; top: 50px; left: 300px; resize: both; min-width: 300px; min-height: 400px; }
-        #pdf-container { height: calc(100% - 35px); width: 100%; overflow: auto; background: #ccc; display:block; cursor: grab; position: relative; }
+        #pdf-win { width: 650px; height: 850px; top: 50px; left: 300px; resize: both; min-width: 300px; min-height: 400px; }
+        #pdf-container { height: calc(100% - 40px); width: 100%; overflow: auto; background: #ccc; display:block; cursor: grab; position: relative; }
         #pdf-container.grabbing { cursor: grabbing; }
         #pdf-canvas { border: 1px solid #999; user-select: none; }
         .pdf-overlay-controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0, 0, 0, 0.6); padding: 5px; border-radius: 25px; z-index: 101; }
-        .pdf-overlay-controls button { padding: 5px 10px; cursor: pointer; border-radius: 20px; border: none; background: white; font-weight: bold; font-size: 12px; }
-        .pdf-overlay-controls span { color: white; display: flex; align-items: center; font-weight: bold; font-size: 12px; min-width: 50px; justify-content: center; }
+        .pdf-overlay-controls button { padding: 5px 10px; cursor: pointer; border-radius: 20px; border: none; background: white; font-weight: bold; font-size: 14px; }
+        .pdf-overlay-controls span { color: white; display: flex; align-items: center; font-weight: bold; font-size: 14px; min-width: 50px; justify-content: center; }
         .active-mode { border: 3px solid #ff3b30 !important; background: #fff1f0 !important; }
-        #zoom-controls { position: absolute; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 5px; }
-        #zoom-controls button { width: 50px; height: 50px; font-size: 24px; font-weight: bold; border-radius: 25px; border: none; background: rgba(0,0,0,0.5); color: white; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-        #zoom-controls button:active { background: rgba(0,0,0,0.8); }
-        .layer-box { display: flex; gap: 5px; margin-top: 5px; }
-        .layer-box button { flex: 1; padding: 5px; font-size: 12px; cursor: pointer; border-radius: 4px; border: none; }
+        
+        #right-controls { position: absolute; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 5px; }
+        #right-controls button { width: 60px; height: 60px; font-size: 24px; font-weight: bold; border-radius: 30px; border: none; background: rgba(0,0,0,0.5); color: white; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        #right-controls button:active { background: rgba(0,0,0,0.8); }
+        #right-controls button.active { background: #ff3b30; }
+        
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -91,62 +105,65 @@
 </div>
 
 <div id="main-application">
-    <div id="sidebar">
-        <h2 style="font-size: 16px; margin: 0; text-align: center;">B-Logic v6.7</h2>
-        <button class="main-btn btn-panel" onclick="backToDashboard()">◀ 案件選択へ戻る</button>
-        <hr style="width:100%">
-        
-        <div style="background:#ddd; padding:5px; border-radius:8px;">
-            <span style="font-size:12px; font-weight:bold;">● 現在の描画レイヤー</span>
-            <div class="layer-box">
-                <button id="layer-a" style="background:#007AFF; color:white;" onclick="setLayer('userA')">Aさん</button>
-                <button id="layer-b" style="background:#eee;" onclick="setLayer('userB')">Bさん</button>
+    <div id="top-navbar">
+        <div class="group">
+            <button class="top-btn btn-layer" onclick="backToDashboard()">◀ 終了</button>
+            <span style="font-size:14px; font-weight:bold;">● レイヤー:</span>
+            <button id="layer-a" class="top-btn btn-layer active" onclick="setLayer('userA')">A</button>
+            <button id="layer-b" class="top-btn btn-layer" onclick="setLayer('userB')">B</button>
+        </div>
+        <div class="group">
+            <button class="top-btn btn-layer" style="background:#343a40;" onclick="saveLayeredDataFirebase()">💾保存</button>
+            <button class="top-btn btn-layer" style="background:#5a6268;" onclick="loadAndMergeDataFirebase()">📂読込</button>
+            <button class="top-btn btn-layer" style="background:#dc3545;" onclick="deleteObject()">🗑️削除</button>
+            <button class="top-btn btn-layer" style="background:#28a745;" onclick="saveAsPDF()">📄PDF</button>
+        </div>
+    </div>
+
+    <div id="content-area">
+        <div id="sidebar">
+            <div id="shape-mode-panel" style="background:#eee; padding:5px; border-radius:8px; border: 2px solid transparent;">
+                <span style="font-size:13px; font-weight:bold; color:#007AFF;">● 図面記号</span>
+                <select id="shape-type"><option value="ellipse">楕円形</option><option value="rect">長方形</option></select>
+                <select id="hatch-type" style="margin-top:4px;">
+                    <option value="none">なし</option>
+                    <option value="hibi_free">ひびわれ（手書き）</option> 
+                    <option value="hakuri">剥離</option><option value="lime">遊離石灰</option>
+                    <option value="tekin">鉄筋露出</option><option value="uki">うき</option><option value="rousui">漏水</option><option value="fushoku">腐食</option>
+                </select>
+                <button id="shape-draw-btn" class="main-btn" style="margin-top:4px; padding:8px; font-size:14px;" onclick="toggleShapeMode()">配置モード</button>
             </div>
-        </div>
 
-        <div id="shape-mode-panel" style="background:#eee; padding:5px; border-radius:8px; border: 2px solid transparent; margin-top:5px;">
-            <span style="font-size:11px; font-weight:bold; color:#007AFF;">図面記号</span>
-            <select id="shape-type"><option value="ellipse">楕円形</option><option value="rect">長方形</option></select>
-            <select id="hatch-type" style="margin-top:4px;">
-                <option value="none">なし</option>
-                <option value="hibi_free">ひびわれ（手書き）</option> 
-                <option value="hakuri">剥離</option><option value="lime">遊離石灰</option>
-                <option value="tekin">鉄筋露出</option><option value="uki">うき</option><option value="rousui">漏水</option><option value="fushoku">腐食</option>
-            </select>
-            <button id="shape-draw-btn" class="main-btn" style="margin-top:4px;" onclick="toggleShapeMode()">配置モード開始</button>
-        </div>
-
-        <button class="main-btn" onclick="toggleStepPanel()">🚩 旗揚げを追加</button>
-        <div id="step-panel" style="display:none; background:#fff; border:2px solid #007AFF; padding:5px; border-radius:8px;">
-            <select id="damage-type" onchange="showGradeStep()"><option value="">損傷を選択...</option></select>
-            <div id="grade-step" style="display:none; margin-top:5px;">
-                <div class="grade-group">
-                    <button onclick="setGrade(this,'a')">a</button><button onclick="setGrade(this,'b')">b</button><button onclick="setGrade(this,'c')">c</button><button onclick="setGrade(this,'d')">d</button><button onclick="setGrade(this,'e')">e</button>
+            <button class="main-btn btn-green" style="font-size:14px;" onclick="toggleStepPanel()">🚩 旗揚げ</button>
+            <div id="step-panel" style="display:none; background:#fff; border:2px solid #007AFF; padding:5px; border-radius:8px;">
+                <select id="damage-type" onchange="showGradeStep()"><option value="">損傷を選択...</option></select>
+                <div id="grade-step" style="display:none; margin-top:5px;">
+                    <div class="grade-group">
+                        <button onclick="setGrade(this,'a')">a</button><button onclick="setGrade(this,'b')">b</button><button onclick="setGrade(this,'c')">c</button><button onclick="setGrade(this,'d')">d</button><button onclick="setGrade(this,'e')">e</button>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <button class="main-btn btn-orange" onclick="openNumpad()">📏 寸法入力</button>
-        <button class="main-btn" onclick="addFreeText()">Ｔ テキスト入力</button>
-        <button class="main-btn btn-green" onclick="document.getElementById('file-input').click()">📷 写真追加</button>
-        <button class="main-btn btn-panel" onclick="openReportWindow()">📄 前回調書を表示</button>
+            <button class="main-btn" style="background:#ff9500; font-size:14px;" onclick="openNumpad()">📏 寸法入力</button>
+            <button class="main-btn" style="background:#6c757d; font-size:14px;" onclick="addFreeText()">Ｔ テキスト</button>
+            
+            <div id="photo-action-panel" class="hidden" style="display:flex; flex-direction:column; gap:8px; background:#e9ecef; padding:8px; border-radius:8px;">
+                <span style="font-size:12px; font-weight:bold; color:#555; text-align:center;">● 選択中オブジェクト</span>
+                <button class="main-btn btn-green" style="font-size:14px; background:#17a2b8;" onclick="document.getElementById('file-input').click()">📷 写真追加</button>
+                <button class="main-btn btn-green" style="font-size:14px;" onclick="viewSelectedPhotos()">🖼️ 写真表示</button>
+            </div>
+            
+            <button class="main-btn" style="background:#6c757d; font-size:14px; margin-top:10px;" onclick="openReportWindow()">📄 前回調書</button>
+        </div>
         
-        <button class="main-btn" style="background: #343a40; margin-top: 10px;" onclick="saveLayeredDataFirebase()">💾 レイヤー保存</button>
-        <button class="main-btn" style="background: #5a6268; margin-top: 5px;" onclick="loadAndMergeDataFirebase()">📂 他レイヤー読込・統合</button>
-        
-        <button class="main-btn btn-red" onclick="deleteObject()">選択削除</button>
-        
-        <button class="main-btn" style="background: #28a745; margin-top: 10px;" onclick="saveAsPDF()">💾 PDFとして保存</button>
-        
-        <input type="file" id="file-input" style="display:none" accept="image/*" multiple onchange="handleFiles(this)">
-    </div>
-    
-    <div id="canvas-container">
-        <canvas id="c"></canvas>
-        <div id="zoom-controls">
-            <button onclick="zoomBtn(1.2)">＋</button>
-            <button onclick="zoomBtn(0.8)">ー</button>
-            <button onclick="resetViewport()" style="font-size:16px;">全景</button>
+        <div id="canvas-container">
+            <canvas id="c"></canvas>
+            <div id="right-controls">
+                <button id="pan-mode-btn" onclick="togglePanMode()">🖐️</button>
+                <button onclick="zoomBtn(1.2)">＋</button>
+                <button onclick="zoomBtn(0.8)">ー</button>
+                <button onclick="resetViewport()" style="font-size:18px;">全景</button>
+            </div>
         </div>
     </div>
 </div>
@@ -186,19 +203,20 @@
     </div>
 </div>
 
+<input type="file" id="file-input" style="display:none" accept="image/*" multiple onchange="handleFiles(this)">
+
 <script>
-    // --- Fabric.js Setup ---
     const canvas = new fabric.Canvas('c', { backgroundColor: '#fff', selection: true });
     const PITCH = 30; const patternCache = {};
     const damages = ["01:腐食", "02:亀裂", "03:ゆるみ・脱落", "04:破断", "05:防食機能の劣化", "06:ひびわれ", "07:剥離・鉄筋露出", "08:漏水・遊離石灰", "09:抜け落ち", "10:補修・補強材の損傷", "11:床板ひびわれ", "12:うき", "13:遊間の異常", "14:路面の凹凸", "15:舗装の異常", "16:支承部の機能障害", "17:その他", "18:定着部の異常", "19:変色・劣化", "20:漏水・帯水", "21:異常な音・振動", "22:異常なたわみ", "23:変形・欠損", "24:土砂詰まり", "25:沈下・移動・傾斜", "26:洗堀"];
     const select = document.getElementById('damage-type');
     damages.forEach(d => { let opt = document.createElement('option'); opt.value = d; opt.innerText = d; select.appendChild(opt); });
 
-    // ★現在のユーザー（レイヤー）
     let currentLayer = 'userA';
-
     let activeMode = null; let currentGrade = "";
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+    let isPanMode = false;
 
     let rowCounter = 1;
     function addRow() {
@@ -209,17 +227,12 @@
         tbody.appendChild(row);
     }
 
-    // ★レイヤー切り替え関数
     function setLayer(layer) {
         currentLayer = layer;
-        document.getElementById('layer-a').style.background = (layer === 'userA') ? '#007AFF' : '#eee';
-        document.getElementById('layer-a').style.color = (layer === 'userA') ? 'white' : 'black';
-        document.getElementById('layer-b').style.background = (layer === 'userB') ? '#007AFF' : '#eee';
-        document.getElementById('layer-b').style.color = (layer === 'userB') ? 'white' : 'black';
-        alert(layer + " のレイヤーに切り替えたぜ！");
+        document.getElementById('layer-a').classList.toggle('active', layer === 'userA');
+        document.getElementById('layer-b').classList.toggle('active', layer === 'userB');
     }
 
-    // --- 背景図面の読み込み (損傷図) ---
     function loadDamagePdfToMainCanvas(file) {
         if (!file) return;
         const reader = new FileReader();
@@ -235,7 +248,7 @@
                         canvas.setWidth(viewport.width);
                         canvas.setHeight(viewport.height);
                         fabric.Image.fromURL(tempCanvas.toDataURL(), function(img) {
-                            img.set({ selectable: false, evented: false, layerId: 'background' }); // 背景も識別
+                            img.set({ selectable: false, evented: false, layerId: 'background' });
                             canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
                             resetViewport();
                         });
@@ -246,7 +259,20 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // --- パンニング（移動）ロジック ---
+    function togglePanMode() {
+        isPanMode = !isPanMode;
+        const btn = document.getElementById('pan-mode-btn');
+        if (isPanMode) {
+            btn.classList.add('active');
+            canvas.defaultCursor = 'grab';
+            canvas.selection = false;
+        } else {
+            btn.classList.remove('active');
+            canvas.defaultCursor = 'default';
+            canvas.selection = true;
+        }
+    }
+
     let isDragging = false;
     let lastPosX, lastPosY;
     let zoomLevel = 1;
@@ -255,12 +281,11 @@
 
     canvas.on('mouse:down', function(opt) {
         var evt = opt.e;
-        if (!canvas.isDrawingMode && !opt.target) {
+        if (isPanMode && !opt.target) {
             isDragging = true;
-            canvas.selection = false;
+            canvas.setCursor('grabbing');
             lastPosX = evt.clientX || (evt.touches ? evt.touches[0].clientX : 0);
             lastPosY = evt.clientY || (evt.touches ? evt.touches[0].clientY : 0);
-            canvas.setCursor('grabbing');
         }
     });
 
@@ -280,11 +305,9 @@
 
     canvas.on('mouse:up', function(opt) {
         isDragging = false;
-        canvas.selection = true;
-        canvas.setCursor('default');
+        canvas.setCursor(isPanMode ? 'grab' : 'default');
     });
 
-    // ★ズーム関数
     function zoomBtn(factor) {
         const center = canvas.getCenter();
         const point = new fabric.Point(center.left, center.top);
@@ -294,7 +317,6 @@
         canvas.zoomToPoint(point, zoomLevel);
     }
 
-    // 視点リセット
     function resetViewport() {
         canvas.setZoom(1);
         canvas.viewportTransform[4] = 0;
@@ -302,7 +324,6 @@
         canvas.renderAll();
     }
 
-    // --- 前回調書PDFビューア ---
     let currentReportFile = null;
     let reportPdfDoc = null; let reportPageNum = 1; let reportScale = 1.0;
     const pdfContainer = document.getElementById('pdf-container');
@@ -321,7 +342,9 @@
 
     function openReportWindow() {
         if (!currentReportFile) { alert("前回調書PDFを選択してくれ！"); return; }
-        document.getElementById('pdf-win').style.display = 'block';
+        const win = document.getElementById('pdf-win');
+        win.style.display = 'block';
+        win.style.top = "50px"; win.style.left = "300px";
         reportScale = 1.0;
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -337,7 +360,6 @@
     function prevPage() { if (reportPageNum <= 1) return; reportPageNum--; renderReportPage(reportPageNum); }
     function nextPage() { if (reportPageNum >= reportPdfDoc.numPages) return; reportPageNum++; renderReportPage(reportPageNum); }
 
-    // PDF パンニング
     let isPdfDragging = false; let pStartX, pStartY, pScrollLeft, pScrollTop;
     pdfContainer.addEventListener('mousedown', (e) => {
         if (e.target.tagName === 'BUTTON') return;
@@ -354,7 +376,6 @@
         pdfContainer.scrollTop = pScrollTop - (y - pStartY);
     });
 
-    // --- 描画エンジン (v5.5 + レイヤー機能) ---
     function toggleShapeMode() {
         activeMode = (activeMode === 'shape') ? null : 'shape';
         const isHibi = document.getElementById('hatch-type').value === 'hibi_free';
@@ -366,7 +387,6 @@
         updateUI();
     }
     canvas.on('path:created', function(e) {
-        // ★描画されたオブジェクトに現在のレイヤーIDを付与
         e.path.set({ layerId: currentLayer });
         if (activeMode === 'shape' && canvas.isDrawingMode) { activeMode = null; canvas.isDrawingMode = false; updateUI(); }
     });
@@ -375,7 +395,7 @@
         document.getElementById('shape-mode-panel').classList.toggle('active-mode', activeMode === 'shape');
         const btn = document.getElementById('shape-draw-btn');
         if (activeMode === 'shape') { const isHibi = document.getElementById('hatch-type').value === 'hibi_free'; btn.innerText = isHibi ? '描画中...' : '配置中...'; }
-        else { btn.innerText = '配置モード開始'; }
+        else { btn.innerText = '配置モード'; }
     }
     function applyLegend(obj) {
         if (!obj || !obj.hatchType || obj.hatchType === 'hibi_free') return;
@@ -441,14 +461,29 @@
                 const activeText = canvas.getObjects().slice(-2)[0]; canvas.setActiveObject(activeText); canvas._setupCurrentTransform(opt.e, activeText, true);
                 activeMode = null; document.getElementById('step-panel').style.display='none'; updateUI();
             }
-        }
+        },
+        'selection:created': showPhotoPanel,
+        'selection:updated': showPhotoPanel,
+        'selection:cleared': hidePhotoPanel
     });
     
+    // ★オブジェクト選択時の写真ボタン表示ロジック修正
+    function showPhotoPanel(e) {
+        if (e.selected[0]) {
+            // 図形または旗揚げを選択している場合に写真パネルを表示
+            document.getElementById('photo-action-panel').classList.remove('hidden');
+        } else {
+            hidePhotoPanel();
+        }
+    }
+    function hidePhotoPanel() {
+        document.getElementById('photo-action-panel').classList.add('hidden');
+    }
+
     let flagIdCounter = 0;
     function addFlag(label, x, y) {
         flagIdCounter++;
         const id = 'f' + flagIdCounter;
-        // ★旗のグループ全体にlayerIdを付与（実際はtextに付与し、load時に他を紐付ける）
         const text = new fabric.IText(label + " [0枚]", { left: x + 15, top: y - 28, fontSize: 18, fontWeight: 'bold', fill: 'blue', hasControls: false, isFlag: true, flagId: label, photos: [], id: id, layerId: currentLayer });
         const shoulder = new fabric.Line([x, y, x + 140, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-shoulder', layerId: currentLayer });
         const leader = new fabric.Line([x - 60, y + 60, x, y], { stroke: 'blue', strokeWidth: 2, selectable: false, evented: false, id: id + '-leader', layerId: currentLayer });
@@ -480,20 +515,26 @@
     function showGradeStep() { if (select.value) document.getElementById('grade-step').style.display = 'block'; }
     function addFreeText() { canvas.add(new fabric.IText('テキスト入力', { left: 150, top: 150, fontSize: 20, fill: '#333', layerId: currentLayer })); }
     
-    // ★削除機能の強化：自分のレイヤーしか消せないようにする？（今回は一旦全部消せるようにするが、layerId付きで保存する）
-    function deleteObject() { const a = canvas.getActiveObject(); if (a) { if (a.shoulder) canvas.remove(a.shoulder, a.leader, a.tip); if (a._extra) a._extra.forEach(e => canvas.remove(e)); canvas.remove(a); canvas.renderAll(); } }
+    function deleteObject() { const a = canvas.getActiveObject(); if (a) { if (a.shoulder) canvas.remove(a.shoulder, a.leader, a.tip); if (a._extra) a._extra.forEach(e => canvas.remove(e)); canvas.remove(a); canvas.renderAll(); hidePhotoPanel(); } }
     
-    function handleFiles(input) { const a = canvas.getActiveObject(); if (!a || !a.isFlag) return; Array.from(input.files).forEach(f => { const r = new FileReader(); r.onload = (e) => { a.photos.push(e.target.result); a.set('text', a.flagId + " [" + a.photos.length + "枚]"); canvas.renderAll(); }; r.readAsDataURL(f); }); }
-    canvas.on('mouse:dblclick', (opt) => {
-        if (opt.target && opt.target.isFlag) {
-            document.getElementById('pop-title').innerText = opt.target.flagId;
-            const c = document.getElementById('pop-img-container'); c.innerHTML = '';
-            opt.target.photos.forEach(s => { const i = document.createElement('img'); i.src = s; c.appendChild(i); });
-            document.getElementById('photo-overlay').style.display = 'block';
-        }
-    });
+    function handleFiles(input) { const a = canvas.getActiveObject(); if (!a) return; 
+        Array.from(input.files).forEach(f => { const r = new FileReader(); r.onload = (e) => {
+            if(!a.photos) a.photos = [];
+            a.photos.push(e.target.result);
+            if(a.isFlag) a.set('text', a.flagId + " [" + a.photos.length + "枚]");
+            canvas.renderAll();
+        }; r.readAsDataURL(f); });
+    }
+    
+    function viewSelectedPhotos() {
+        const a = canvas.getActiveObject();
+        if (!a || !a.photos || a.photos.length === 0) { alert("写真がないか、写真付きオブジェクトが選択されてないぜ！"); return; }
+        document.getElementById('pop-title').innerText = a.isFlag ? a.flagId : "図形画像";
+        const c = document.getElementById('pop-img-container'); c.innerHTML = '';
+        a.photos.forEach(s => { const i = document.createElement('img'); i.src = s; c.appendChild(i); });
+        document.getElementById('photo-overlay').style.display = 'block';
+    }
 
-    // --- ★Firebase レイヤー対応連携処理 ---
     const firebaseConfig = {
       apiKey: "AIzaSyAyyafLY-Nccm-yI8SdwtVAbZaWRvDwXes",
       authDomain: "bridge-inspection-tool.firebaseapp.com",
@@ -506,23 +547,16 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    const docId = "test-project-001"; // 同じドキュメントを使う
+    const docId = "test-project-001";
 
     function saveLayeredDataFirebase() {
-        // 現在のキャンバス上の全データを取得し、JSON化
         const json = canvas.toJSON(['hatchType', 'isFlag', 'flagId', 'photos', 'id', 'name', 'layerId']);
-        
-        // ★Firestoreに保存するデータを「ユーザー別」にする
         db.collection("layered_inspections").doc(docId).set({
-            [currentLayer]: JSON.stringify(json), // 例: { "userA": "..." } の形式で保存
+            [currentLayer]: JSON.stringify(json),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }) // ★マージして保存（他のユーザーのデータを上書きしない）
-        .then(() => {
-            alert(currentLayer + " のデータをFirebaseに保存したぜ！");
-        })
-        .catch((error) => {
-            alert("保存失敗だぜ...: " + error);
-        });
+        }, { merge: true })
+        .then(() => alert(currentLayer + " のデータを保存したぜ！"))
+        .catch((error) => alert("保存失敗だぜ...: " + error));
     }
 
     function loadAndMergeDataFirebase() {
@@ -530,50 +564,27 @@
         .then((doc) => {
             if (doc.exists) {
                 const docData = doc.data();
-                
-                // --- 1. 背景図面だけを残してクリア ---
                 const bgImage = canvas.backgroundImage;
                 canvas.clear();
                 canvas.setBackgroundImage(bgImage, canvas.renderAll.bind(canvas));
-
-                // --- 2. 保存されている全レイヤーデータを取得してロード ---
                 for (const userId in docData) {
                     if (userId === 'updatedAt') continue;
-                    
                     const jsonData = JSON.parse(docData[userId]);
-                    
-                    // 背景情報は無視（最初の背景だけで良い）
-                    if (jsonData.backgroundImage) {
-                        if (!canvas.backgroundImage) {
-                            // もし背景がなければ読み込む
-                            // (本来はここもマージ処理が必要だが、一旦簡略化)
-                        }
-                    }
-
-                    // データをロード
                     canvas.loadFromJSON(jsonData, function() {
-                        // ロード後のFabricオブジェクト再構築処理
                         rebuildObjects();
                         canvas.renderAll();
                     });
                 }
-                alert("他の人のレイヤーを統合したぜ！");
-            } else {
-                alert("データが見つからないぜ。");
-            }
+                alert("統合したぜ！");
+            } else alert("データがないぜ。");
         })
-        .catch((error) => {
-            alert("読み込み失敗だぜ...: " + error);
-        });
+        .catch((error) => alert("読み込み失敗だぜ...: " + error));
     }
     
-    // ロード後のオブジェクト紐付け処理（旗など）
     function rebuildObjects() {
         const objects = canvas.getObjects();
         objects.forEach(obj => {
-            if (obj.hatchType) applyLegend(obj); // パターン再適用
-            
-            // 旗の紐付け
+            if (obj.hatchType) applyLegend(obj);
             if (obj.isFlag) {
                 const id = obj.id;
                 obj.shoulder = objects.find(o => o.id === id + '-shoulder');
@@ -587,7 +598,6 @@
         });
     }
 
-    // --- Screen & Window Management ---
     function startInspection(rowId) {
         const damageFile = document.getElementById(`damage-file-${rowId}`);
         const reportFile = document.getElementById(`report-file-${rowId}`);
@@ -604,17 +614,26 @@
         canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
     }
 
-    // 浮遊窓ドラッグ処理
     [document.getElementById('numpad-win'), document.getElementById('photo-overlay'), document.getElementById('pdf-win')].forEach(win => {
         const h = win.querySelector('.win-header'); let isD = false; let ox, oy;
         h.onmousedown = (e) => { isD = true; ox = e.clientX - win.offsetLeft; oy = e.clientY - win.offsetTop; };
         h.ontouchstart = (e) => { isD = true; const t = e.touches[0]; ox = t.clientX - win.offsetLeft; oy = t.clientY - win.offsetTop; };
-        window.addEventListener('mousemove', (e) => { if(isD){ win.style.left = (e.clientX-ox)+'px'; win.style.top = (e.clientY-oy)+'px'; }});
-        window.addEventListener('touchmove', (e) => { if(isD){ const t = e.touches[0]; win.style.left = (t.clientX-ox)+'px'; win.style.top = (t.clientY-oy)+'px'; }});
+        window.addEventListener('mousemove', (e) => { if(isD){ 
+            let x = e.clientX-ox; let y = e.clientY-oy;
+            x = Math.max(0, Math.min(x, window.innerWidth - win.offsetWidth));
+            y = Math.max(0, Math.min(y, window.innerHeight - win.offsetHeight));
+            win.style.left = x+'px'; win.style.top = y+'px'; 
+        }});
+        window.addEventListener('touchmove', (e) => { if(isD){ 
+            const t = e.touches[0];
+            let x = t.clientX-ox; let y = t.clientY-oy;
+            x = Math.max(0, Math.min(x, window.innerWidth - win.offsetWidth));
+            y = Math.max(0, Math.min(y, window.innerHeight - win.offsetHeight));
+            win.style.left = x+'px'; win.style.top = y+'px'; 
+        }});
         window.addEventListener('mouseup', () => isD = false); window.addEventListener('touchend', () => isD = false);
     });
 
-    // --- PDF 保存機能 ---
     function saveAsPDF() {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({
@@ -622,11 +641,7 @@
             unit: 'px',
             format: [canvas.width, canvas.height]
         });
-        const dataURL = canvas.toDataURL({
-            format: 'png',
-            quality: 1.0,
-            multiplier: 1
-        });
+        const dataURL = canvas.toDataURL({ format: 'png', quality: 1.0, multiplier: 1 });
         pdf.addImage(dataURL, 'PNG', 0, 0, canvas.width, canvas.height);
         pdf.save("layered_inspection_result.pdf");
         alert("PDFをダウンロードしたぜ！");
